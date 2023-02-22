@@ -1,14 +1,9 @@
 '''Module to play a game of Seven Wonders Duel'''
 import csv
-import numpy as np
+import pandas as pd
 from numpy.random import default_rng
 from sty import fg, bg, rs
 
-#To do: 
-#Change pd dataframe into numpy array -> Adjusted to np.array
-#Configured card_constructable function to only allow constructing cards when enough money is available
-
-#Configured construct_card to decrease coins when card is constructed
 
 class Game:
     '''Define a single instance of a game'''
@@ -19,7 +14,6 @@ class Game:
         self.game_count = game_count
         self.players = [Player(0, 'human'), Player(1, 'human')]
         self.state_variables = StateVariables()
-        print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
 
     def __repr__(self):
@@ -53,7 +47,7 @@ class Game:
 
     # Main gameplay loop - players alternate choosing cards from the board and performing actions with them.
     def select_card(self, position, action='c'):
-        '''Function to select card on board and perform the appropriate action'''
+        '''Function to select card on baord and perform the appropriate action'''
         # Turn player variables
         player = self.state_variables.turn_player
         player_state = self.players[player]
@@ -84,20 +78,19 @@ class Game:
             return self.request_player_input()
 
         # Discard or construct chosen card and remove card from board
-        if action == 'c':
-            # Add card to board.
-            if self.card_constructable(player_state, chosen_position.card_in_slot) is True:
-                player_state.construct_card(chosen_position.card_in_slot)
-            else:
-                print('You do not have the resources required to construct this card!')
+        match action:
+            case 'c':  # Add card to board.
+                if self.card_constructable(player_state, chosen_position.card_in_slot) is True:
+                    player_state.construct_card(chosen_position.card_in_slot)
+                else:
+                    print('You do not have the resources required to construct this card!')
+                    return self.request_player_input()
+            case 'd':  # Gain coins based on yellow building owned.
+                yellow_card_count = len([card for card in player_board if card.card_type == 'Yellow'])
+                player_state.coins += 2 + yellow_card_count
+            case _:
+                print('This is not a valid action!')
                 return self.request_player_input()
-        elif action == 'd':
-            # Gain coins based on yellow building owned.
-            yellow_card_count = len([card for card in player_board if card.card_type == 'Yellow'])
-            player_state.coins += 2 + yellow_card_count
-        else:
-            print('This is not a valid action!')
-            return self.request_player_input()
 
         chosen_position.card_in_slot = None
         player_state.update()
@@ -121,9 +114,7 @@ class Game:
     # TODO Check whether card is constructable given arbitrary player/opponent/card objects
     def card_constructable(self, player, card):
         '''Checks whether a card is constructable given current player states'''
-        cost = np.array(list(card.card_cost)) #split string into components
-        cost =  np.count_nonzero(cost[cost == "$"]) if list(card.card_cost) else 0 #count all components == $
-        return False if cost > player.coins else True #False if cost > coins
+        return True
 
     # Takes 2 Player objects and 1 Card object and constructs the card if possible. If it cannot, returns False.
     def valid_moves(self, player, opponent, age):  # TODO Return list of valid moves for current player.
@@ -139,9 +130,9 @@ class Game:
         self.age_boards[age].display_board()
         print("Player 1 >", self.players[0])
         print("Player 2 >", self.players[1])
-        print("")
         print("Current turn player is Player ", str(player + 1))
-        
+
+
 class Card:
     '''Define a single card. Attributes match the .csv headers'''
     colour_key = {
@@ -170,18 +161,18 @@ class Card:
                    + self.card_name
                    + rs.all)
 
+
 class CardSlot:
     '''Define a card slot on board to represent selectability, visibility, etc.'''
 
     def __init__(self, card_in_slot=None, card_board_position=None, game_age=None,
                  card_visible=1, card_selectable=0, covered_by=None, row=None):
-        self.card_board_position = int(card_board_position)
+        self.card_board_position = card_board_position
         self.game_age = game_age
         self.card_in_slot = card_in_slot
-        self.card_visible = int(card_visible)
+        self.card_visible = card_visible
         self.card_selectable = card_selectable
-        if covered_by:
-        #if isinstance(covered_by, str):
+        if isinstance(covered_by, str):
             self.covered_by = [int(card) for card in str(covered_by).split(" ")]
         else:
             self.covered_by = []
@@ -190,7 +181,7 @@ class CardSlot:
     def __repr__(self):  # How the cards are displayed to the players.
         if self.card_in_slot is None:
             return str("")
-        
+
         if self.card_visible == 0:
             return str("#" + repr(self.card_board_position)
                        + " Hidden " + repr(self.covered_by)
@@ -199,6 +190,7 @@ class CardSlot:
         return str("#" + repr(self.card_board_position) + " "
                    + repr(self.card_in_slot)
                    )
+
 
 class Player:
     '''Define a class for play to track tableau cards, money, etc.'''
@@ -231,15 +223,13 @@ class Player:
     # removal of card from game board is done elsewhere! (in Game.select_card method).
     def construct_card(self, card):
         '''Fucntion to construct a card in a players tableau'''
-        cost = np.array(list(card.card_cost)) #split string into components
-        cost =  np.count_nonzero(cost[cost == "$"]) if list(card.card_cost) else 0 #count all components == $
-        self.coins -= cost
         self.cards_in_play.append(card)
         return
 
     def update(self):
         '''Updates player passive variables based on players tableau'''
         return
+
 
 class StateVariables:
     '''Class to represent all state variables shared between players (military, turn player, etc.)'''
@@ -264,16 +254,23 @@ class StateVariables:
         else:
             self.game_end = True
 
+
 class Age:
     '''Class to define a game age and represent the unique board layouts'''
-    
-    # Import card layout and labels for each age:
-    age_layouts = np.genfromtxt('age_layout.csv', delimiter=',', skip_header=1, dtype=str)
-    age_layouts_labels = np.genfromtxt('age_layout.csv', delimiter=',', dtype=str, max_rows=1)
-    
+    # TODO !!! Remove dependency on pandas for csv load and board setup
+    #
+    # Import card layout for each age:
+    age_layouts = pd.read_csv('age_layout.csv', dtype={
+        'game_age': 'category',
+    })
+
+
     # Import full card list:
-    card_list = np.genfromtxt('card_list.csv', delimiter=',', skip_header=1, dtype=str)
-    card_list_labels = np.genfromtxt('card_list.csv', delimiter=',', dtype=str, max_rows=1)
+    card_list = pd.read_csv('card_list.csv', dtype={
+        'card_set': 'category',  # Set as category to speed up filter
+        'card_type': 'category',
+        'card_age': 'category',
+    })
 
     age_1_card_count = 20
     age_2_card_count = 20
@@ -283,40 +280,46 @@ class Age:
     def __init__(self, age):
         self.age = age
         self.card_positions = self.prepare_age_board(age)
-        self.number_of_rows = int(max(self.card_positions[slot].row for slot in range(len(self.card_positions))))
+        self.number_of_rows = max(self.card_positions[slot].row for slot in range(len(self.card_positions)))
 
     def __repr__(self):
         return str('Age ' + str(self.age))
 
     # Init functions:
 
-    def prepare_age_board(self, age):   
+    def prepare_age_board(self, age):
         '''Takes dataframe of all cards and creates list of card objects representing the board for a given age.'''
-        age = str(age)  # Convert to int if required
-        age_layout = self.age_layouts[np.where(self.age_layouts[:,4] == age)]  # Filter for age
-        age_cards = self.card_list[np.where(self.card_list[:,6] == age)]  # Filter for age
+        age = str(age)  # Convert to string if required
+        age_layout = self.age_layouts.loc[self.age_layouts['game_age'] == age]. \
+            reset_index(drop=True)  # Filter for age & reset index
+        age_cards = self.card_list.loc[self.card_list['card_age'] == age]  # Filter for age
 
-        if age == "1":
-            age_cards = age_cards[np.random.choice(age_cards.shape[0], self.age_1_card_count, replace=False)]
-        elif age == "2":
-            age_cards = age_cards[np.random.choice(age_cards.shape[0], self.age_2_card_count, replace=False)]
-        elif age == "3":
-            guilds_chosen = self.card_list[np.where(self.card_list[:,6] == "Guild")]
-            guilds_chosen = guilds_chosen[np.random.choice(guilds_chosen.shape[0], self.age_guild_card_count, replace=False)]
-            age_cards = age_cards[np.random.choice(age_cards.shape[0], self.age_3_card_count, replace=False)]
-            age_cards = np.vstack((age_cards, guilds_chosen)) # Add guild cards and normal cards together
-            np.random.shuffle(age_cards) # Shuffle cards together
-        else:
-            return
-        
-        # Unpack age layout np.array in card slot objects
-        card_positions = [CardSlot(**dict(zip(self.age_layouts_labels, row)))
-                          for row in age_layout]
-        
+        match age:
+            case '1':  # Select random cards for age 1
+                age_cards = age_cards.sample(self.age_1_card_count).reset_index(drop=True)
+            case '2':  # Select random cards for age 2
+                age_cards = age_cards.sample(self.age_2_card_count).reset_index(drop=True)
+            case '3':  # Select guild cards and cards for age 3
+                guilds_chosen = self.card_list.loc[self.card_list['card_age'] == 'Guild'].sample(
+                    self.age_guild_card_count)
+                age_cards = age_cards.sample(self.age_3_card_count)
+                age_cards = age_cards.append(guilds_chosen)  # Add guild cards and normal cards together
+                age_cards = age_cards.sample(frac=1).reset_index(drop=True)  # Shuffle cards together
+            case _:
+                return
+
+        # Unpack age layout dataframe in card slot objects
+        card_positions = [CardSlot(**value)
+                          for _, value
+                          in age_layout.iterrows()]
+
         # Place card objects into card slots
         for slot, _ in enumerate(card_positions):
-            card_positions[slot].card_in_slot = Card(**dict(zip(self.card_list_labels, age_cards[slot])))
-        
+            card_positions[slot].card_in_slot = Card(**age_cards.loc[slot])
+
+        # for slot in range(len(card_positions)):
+        #     card_positions[slot].card_in_slot = Card(**age_cards.loc[slot])
+
         return card_positions
 
     def update_all(self):
@@ -343,11 +346,10 @@ class Age:
         cards = self.card_positions
         rows = self.number_of_rows
         for row in reversed(range(rows + 1)):
-            print("Row", str(row + 1), ":", [card for card in cards if card.row == str(row)])
+            print("Row", str(row + 1), ":", [card for card in cards if card.row == row])
 
 
-# To run the game
 if __name__ == "__main__":
     game1 = Game(1)
     pass
-    game1.request_player_input()
+    # game1.request_player_input()
