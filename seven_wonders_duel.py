@@ -1,14 +1,13 @@
 '''Module to play a game of Seven Wonders Duel'''
-import csv
 import numpy as np
 from numpy.random import default_rng
 from sty import fg, bg, rs
 
-#To do: 
-#Change pd dataframe into numpy array -> Adjusted to np.array
-#Configured card_constructable function to only allow constructing cards when enough money is available
+# TODO:
+# Change pd dataframe into numpy array -> Adjusted to np.array
+# Configured card_constructable function to only allow constructing cards when enough money is available
 
-#Configured construct_card to decrease coins when card is constructed
+# Configured construct_card to decrease coins when card is constructed
 
 class Game:
     '''Define a single instance of a game'''
@@ -122,7 +121,7 @@ class Game:
     def card_constructable(self, player, card):
         '''Checks whether a card is constructable given current player states'''
         cost = np.array(list(card.card_cost)) #split string into components
-        cost =  np.count_nonzero(cost[cost == "$"]) if list(card.card_cost) else 0 #count all components == $
+        cost = np.count_nonzero(cost[cost == "$"]) if list(card.card_cost) else 0 #count all components == $
         return False if cost > player.coins else True #False if cost > coins
 
     # Takes 2 Player objects and 1 Card object and constructs the card if possible. If it cannot, returns False.
