@@ -41,7 +41,38 @@ class Game:
         if action == 'q':
             return print("Game has been quit")
 
-        if action != 'c' and action != 'd' and action != 's':
+        if choice == 'clear': # has been implemented for debugging
+            # clear board and progress age
+            self.state_variables.progress_age()
+            self.display_game_state()
+            print("Board has been cleared!")
+            return self.request_player_input()
+
+        if action == 's':
+            # Display the whole row if an action with s is entered
+            age = self.state_variables.current_age
+            slots_in_age = self.age_boards[age].card_positions
+            image_dict = {}
+            row_list, counts = np.unique([int(slot.row) for slot in slots_in_age], return_counts=True)
+            max_row = row_list[np.argmax(counts)]
+            for i in row_list:
+                image_dict[i] = []  # create an empty dict with the number of rows
+            for j in range(len(slots_in_age)):
+                if slots_in_age[j].card_in_slot is not None:
+                    if slots_in_age[j].card_visible == 1:  # if the card is visible
+                        path = slots_in_age[j].card_in_slot.card_name.replace(" ", "").lower()
+                    else:  # if the card is hidden
+                        path = 'age' + str(age + 1) + 'back'
+                else: # fill empty slots with black
+                    path = 'black'
+                row = int(slots_in_age[j].row)
+                image_dict[row].append(path)  # fill the dictionary with each path per row
+            image = ImageDisplay(220, 350)
+            image.display_row(image_dict, max_row)
+            print("Please choose a card!")
+            return self.request_player_input()
+
+        if action != 'c' and action != 'd':
             print("Select a valid action! (construct or discard)")
             return self.request_player_input()
 
@@ -95,12 +126,6 @@ class Game:
             # Gain coins based on yellow building owned.
             yellow_card_count = len([card for card in player_board if card.card_type == 'Yellow'])
             player_state.coins += 2 + yellow_card_count
-        elif action == 's':
-            name = chosen_position.card_in_slot.card_name.replace(" ", "").lower()
-            image = ImageDisplay(220, 350)
-            image.display_image(f"images\{name}.jpg")
-            print("Please choose a card!")
-            return self.request_player_input()
         else:
             print('This is not a valid action!')
             return self.request_player_input()
