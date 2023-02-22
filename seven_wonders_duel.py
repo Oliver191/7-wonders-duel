@@ -2,6 +2,7 @@
 import numpy as np
 from numpy.random import default_rng
 from sty import fg, bg, rs
+from seven_wonders_visual import ImageDisplay
 
 # TODO:
 # Change pd dataframe into numpy array -> Adjusted to np.array
@@ -40,7 +41,7 @@ class Game:
         if action == 'q':
             return print("Game has been quit")
 
-        if action != 'c' and action != 'd':
+        if action != 'c' and action != 'd' and action != 's':
             print("Select a valid action! (construct or discard)")
             return self.request_player_input()
 
@@ -94,6 +95,12 @@ class Game:
             # Gain coins based on yellow building owned.
             yellow_card_count = len([card for card in player_board if card.card_type == 'Yellow'])
             player_state.coins += 2 + yellow_card_count
+        elif action == 's':
+            name = chosen_position.card_in_slot.card_name.replace(" ", "").lower()
+            image = ImageDisplay(220, 350)
+            image.display_image(f"images\{name}.jpg")
+            print("Please choose a card!")
+            return self.request_player_input()
         else:
             print('This is not a valid action!')
             return self.request_player_input()
@@ -175,10 +182,10 @@ class CardSlot:
     def __init__(self, card_in_slot=None, card_board_position=None, game_age=None,
                  card_visible=1, card_selectable=0, covered_by=None, row=None):
         self.card_board_position = int(card_board_position)
-        self.game_age = game_age
+        self.game_age = int(game_age)
         self.card_in_slot = card_in_slot
         self.card_visible = int(card_visible)
-        self.card_selectable = card_selectable
+        self.card_selectable = int(card_selectable)
         if covered_by:
         #if isinstance(covered_by, str):
             self.covered_by = [int(card) for card in str(covered_by).split(" ")]
