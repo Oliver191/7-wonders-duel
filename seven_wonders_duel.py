@@ -34,8 +34,8 @@ class Game:
             void: [description]
         """
         choice = input("PLAYER " + str(self.state_variables.turn_player + 1) + ": "
-                       + "Select a card to [c]onstruct or [d]iscard for coins. "
-                       + "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
+                       + "Select a card to [c]onstruct or [d]iscard for coins. ")
+                       #+ "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
         action, position = choice[0], choice[1:]
 
         if action == 'q':
@@ -43,6 +43,10 @@ class Game:
 
         if choice == 'clear': # has been implemented for debugging
             # clear board and progress age
+            age = self.state_variables.current_age
+            slots_in_age = self.age_boards[age].card_positions
+            for slot in range(len(slots_in_age)):
+                slots_in_age[slot].card_in_slot = None
             self.state_variables.progress_age()
             self.display_game_state()
             print("Board has been cleared!")
@@ -68,7 +72,10 @@ class Game:
                 row = int(slots_in_age[j].row)
                 image_dict[row].append(path)  # fill the dictionary with each path per row
             image = ImageDisplay(220, 350)
-            image.display_row(image_dict, max_row)
+            if choice == "show":
+                image.display_board(image_dict, max_row)
+            else:
+                image.display_row(image_dict, max_row)
             print("Please choose a card!")
             return self.request_player_input()
 
@@ -152,9 +159,13 @@ class Game:
     # TODO Check whether card is constructable given arbitrary player/opponent/card objects
     def card_constructable(self, player, card):
         '''Checks whether a card is constructable given current player states'''
-        cost = np.array(list(card.card_cost)) #split string into components
-        cost = np.count_nonzero(cost[cost == "$"]) if list(card.card_cost) else 0 #count all components == $
-        return False if cost > player.coins else True #False if cost > coins
+        cost, counts = np.unique(list(card.card_cost), return_counts=True) #split string and return unique values and their counts
+        constructable = True
+        #iterate through all materials and players resources
+        for i, j in zip(['C', 'W', 'S', 'P', 'G', '$'], [player.clay, player.wood, player.stone, player.paper, player.glass, player.coins]):
+            if np.where(cost == i)[0].size > 0:
+                if counts[np.where(cost == i)[0]] > j: constructable = False
+        return constructable #False if cost or materials > players coins or materials
 
     # Takes 2 Player objects and 1 Card object and constructs the card if possible. If it cannot, returns False.
     def valid_moves(self, player, opponent, age):  # TODO Return list of valid moves for current player.
@@ -263,7 +274,7 @@ class Player:
     def construct_card(self, card):
         '''Fucntion to construct a card in a players tableau'''
         cost = np.array(list(card.card_cost)) #split string into components
-        cost =  np.count_nonzero(cost[cost == "$"]) if list(card.card_cost) else 0 #count all components == $
+        cost = np.count_nonzero(cost[cost == "$"]) if list(card.card_cost) else 0 #count all components == $
         self.coins -= cost
         self.cards_in_play.append(card)
         return

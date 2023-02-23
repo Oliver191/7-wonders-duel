@@ -59,3 +59,27 @@ class ImageDisplay:
             self.screen.blit(combined_image, (0, 0))
             pygame.display.update()
         pygame.quit()
+
+    def display_board(self, image_dict, max_row):
+        max_width = self.width * len(image_dict[max_row])
+        max_height = self.height * len(image_dict)
+        self.screen = pygame.display.set_mode((max_width*0.4, max_height*0.4))
+        pygame.display.set_caption("7wonders")
+        win = gw.getWindowsWithTitle("7wonders")[0]
+        win.minimize()
+        win.restore()
+        win.move(-400,-320)
+        combined_image = pygame.Surface((max_width, max_height))
+        for row in reversed(sorted(image_dict)):
+            for i in range(len(image_dict[row])):
+                name = image_dict[row][i]
+                img = pygame.image.load(f"images\{name}.jpg").convert_alpha()
+                combined_image.blit(img, (self.width * i, self.height * (len(image_dict) - row - 1)))
+        combined_image = pygame.transform.scale(combined_image, (max_width*0.4, max_height*0.4))
+        self.screen.blit(combined_image, (0, 0))
+        pygame.display.update()
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT or event.type == pygame.KEYDOWN:
+                    self.running = False
+        pygame.quit()
