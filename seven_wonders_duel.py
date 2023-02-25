@@ -61,9 +61,9 @@ class Game:
             image_dict, selectable_dict, max_row = self.show_board()
             image = ImageDisplay(220, 350)
             if choice == "show":
-                image.display_board(image_dict, selectable_dict, max_row)
-            else:
                 image.display_row(image_dict, selectable_dict, max_row)
+            else:
+                image.display_board(image_dict, selectable_dict, max_row)
             print("Please choose a card!")
             return self.request_player_input()
 
