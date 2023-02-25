@@ -58,28 +58,12 @@ class Game:
 
         if action == 's':
             # Display the whole row if an action with s is entered
-            age = self.state_variables.current_age
-            slots_in_age = self.age_boards[age].card_positions
-            image_dict = {}
-            row_list, counts = np.unique([int(slot.row) for slot in slots_in_age], return_counts=True)
-            max_row = row_list[np.argmax(counts)]
-            for i in row_list:
-                image_dict[i] = []  # create an empty dict with the number of rows
-            for j in range(len(slots_in_age)):
-                if slots_in_age[j].card_in_slot is not None:
-                    if slots_in_age[j].card_visible == 1:  # if the card is visible
-                        path = slots_in_age[j].card_in_slot.card_name.replace(" ", "").lower()
-                    else:  # if the card is hidden
-                        path = 'age' + str(age + 1) + 'back'
-                else: # fill empty slots with black
-                    path = 'black'
-                row = int(slots_in_age[j].row)
-                image_dict[row].append(path)  # fill the dictionary with each path per row
+            image_dict, selectable_dict, max_row = self.show_board()
             image = ImageDisplay(220, 350)
             if choice == "show":
-                image.display_board(image_dict, max_row)
+                image.display_board(image_dict, selectable_dict, max_row)
             else:
-                image.display_row(image_dict, max_row)
+                image.display_row(image_dict, selectable_dict, max_row)
             print("Please choose a card!")
             return self.request_player_input()
 
@@ -175,6 +159,32 @@ class Game:
     def valid_moves(self, player, opponent, age):  # TODO Return list of valid moves for current player.
         '''Returns list of valid moves for given board state and player states'''
         return
+
+    def show_board(self):
+        age = self.state_variables.current_age
+        slots_in_age = self.age_boards[age].card_positions
+        image_dict = {}
+        selectable_dict = {}
+        row_list, counts = np.unique([int(slot.row) for slot in slots_in_age], return_counts=True)
+        max_row = row_list[np.argmax(counts)] # get the row with max card number
+        for i in row_list: # create an empty dict with the number of rows
+            image_dict[i] = []
+            selectable_dict[i] = []
+        for j in range(len(slots_in_age)): # assign path if card is visible and 1 if selectable
+            if slots_in_age[j].card_in_slot is not None:
+                if slots_in_age[j].card_visible == 1:  # if the card is visible
+                    path = slots_in_age[j].card_in_slot.card_name.replace(" ", "").lower()
+                    selectable = 1 if slots_in_age[j].card_selectable == 1 else 0
+                else:  # if the card is hidden
+                    path = 'age' + str(age + 1) + 'back'
+                    selectable = 0
+            else:  # fill empty slots with black
+                path = 'black'
+                selectable = 2
+            row = int(slots_in_age[j].row)
+            image_dict[row].append(path)  # fill the dictionary with each path per row
+            selectable_dict[row].append(selectable)
+        return image_dict, selectable_dict, max_row
 
     # Displays the game state in a nice enough way.
     def display_game_state(self):
