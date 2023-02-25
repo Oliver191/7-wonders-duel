@@ -113,7 +113,7 @@ class Game:
         if action == 'c':
             # Add card to board.
             if self.card_constructable(player_state, chosen_position.card_in_slot) is True:
-                player_state.construct_card(chosen_position.card_in_slot)
+                player_state.construct_card(chosen_position.card_in_slot, player_board, opponent_board)
             else:
                 print('You do not have the resources required to construct this card!')
                 return self.request_player_input()
@@ -301,7 +301,7 @@ class Player:
 
     # TODO Function to construct card (pay resources, add card to player board, gain on buy benefit)
     # removal of card from game board is done elsewhere! (in Game.select_card method).
-    def construct_card(self, card):
+    def construct_card(self, card, player_board, opponent_board):
         '''Fucntion to construct a card in a players tableau'''
         # decrease coins of player by card cost
         cost, counts = np.unique(list(card.card_cost), return_counts=True)  # split string and return unique values and their counts
@@ -319,7 +319,17 @@ class Player:
             science = 'science' + effect[1]
             setattr(self, science, getattr(self, science) + 1)
         elif card.card_type == 'Purple': # handle Purple cards
-            print("Card is Purple")
+            # 1 coin for each card of type in city with most cards
+            if 'Grey' in card.card_effect_when_played.split() and 'Brown' in card.card_effect_when_played.split():
+                type_count = len([1 for card in player_board if card.card_type in ['Grey', 'Brown']])
+                type_count = max(type_count, len([1 for card in opponent_board if card.card_type in ['Grey', 'Brown']]))
+                self.coins += type_count
+
+            for i in ['Yellow', 'Blue', 'Green', 'Red']:
+                if i in card.card_effect_when_played.split():
+                    type_count = len([1 for card in player_board if card.card_type == i])
+                    type_count = max(type_count, len([1 for card in opponent_board if card.card_type == i]))
+                    self.coins += type_count
         else:
             # increase resources of player by card effect
             effect = list(card.card_effect_passive)
