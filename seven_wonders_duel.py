@@ -52,6 +52,10 @@ class Game:
             print("Board has been cleared!")
             return self.request_player_input()
 
+        if choice == 'again': #to display game state again
+            self.display_game_state()
+            return self.request_player_input()
+
         if action == 's':
             # Display the whole row if an action with s is entered
             age = self.state_variables.current_age
@@ -163,7 +167,7 @@ class Game:
         constructable = True
         #iterate through all materials and players resources
         for i, j in zip(['C', 'W', 'S', 'P', 'G', '$'], [player.clay, player.wood, player.stone, player.paper, player.glass, player.coins]):
-            if np.where(cost == i)[0].size > 0:
+            if i in card.card_cost:
                 if counts[np.where(cost == i)[0]] > j: constructable = False
         return constructable #False if cost or materials > players coins or materials
 
@@ -258,6 +262,7 @@ class Player:
 
         # Passive variables can be updated anytime based on cards_in_play via self.update() method.
         self.victory_points = 0
+        self.military_points = 0
         self.clay = 0
         self.wood = 0
         self.stone = 0
@@ -267,15 +272,40 @@ class Player:
 
     def __repr__(self):
         return str(" Coins: " + repr(self.coins)
-                   + ", Board: " + repr(self.cards_in_play))
+                   + ", Victory: " + repr(self.victory_points)
+                   + ", Military: " + repr(self.military_points)
+                   + ", C" + repr(self.clay)
+                   + " W" + repr(self.wood)
+                   + " S" + repr(self.stone)
+                   + " P" + repr(self.paper)
+                   + " G" + repr(self.glass)
+                   + ",\n Board: " + repr(self.cards_in_play))
 
     # TODO Function to construct card (pay resources, add card to player board, gain on buy benefit)
     # removal of card from game board is done elsewhere! (in Game.select_card method).
     def construct_card(self, card):
         '''Fucntion to construct a card in a players tableau'''
-        cost = np.array(list(card.card_cost)) #split string into components
-        cost = np.count_nonzero(cost[cost == "$"]) if list(card.card_cost) else 0 #count all components == $
-        self.coins -= cost
+        # decrease coins of player by card cost
+        cost, counts = np.unique(list(card.card_cost), return_counts=True)  # split string and return unique values and their counts
+        if '$' in card.card_cost:
+            self.coins -= counts[np.where(cost == '$')[0]][0] # decrease coins by card cost
+
+        # TODO Change csv to have correct values and consider science, victory, military points or optional resources
+        # increase player variables by resource card effect
+        if card.card_type == 'Yellow': # handle Yellow cards
+            print("Card is Yellow")
+        elif card.card_type == 'Green': # handle Green cards
+            print("Card is Green")
+        elif card.card_type == 'Purple': # handle Purple cards
+            print("Card is Purple")
+        else:
+            # increase resources of player by card effect
+            cost = list(card.card_effect_passive)
+            resource = ['C', 'W', 'S', 'P', 'G', 'V', 'M']
+            resource_names = ['clay', 'wood', 'stone', 'paper', 'glass', 'victory_points', 'military_points']
+            if cost[1] in resource:
+                resource_name = resource_names[resource.index(cost[1])]
+                setattr(self, resource_name, getattr(self, resource_name) + int(cost[0]))
         self.cards_in_play.append(card)
         return
 
