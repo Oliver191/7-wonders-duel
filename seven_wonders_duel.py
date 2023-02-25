@@ -279,6 +279,12 @@ class Player:
         self.paper = 0
         self.glass = 0
         self.victory_tokens = []
+        self.science1 = 0
+        self.science2 = 0
+        self.science3 = 0
+        self.science4 = 0
+        self.science5 = 0
+        self.science6 = 0
 
     def __repr__(self):
         return str(" Coins: " + repr(self.coins)
@@ -289,6 +295,8 @@ class Player:
                    + " S" + repr(self.stone)
                    + " P" + repr(self.paper)
                    + " G" + repr(self.glass)
+                   + ", Science: " + repr(self.science1) + ' ' + repr(self.science2) + ' ' + repr(self.science3)
+                   + ' ' + repr(self.science4) + ' ' + repr(self.science5) + ' ' + repr(self.science6)
                    + ",\n Board: " + repr(self.cards_in_play))
 
     # TODO Function to construct card (pay resources, add card to player board, gain on buy benefit)
@@ -305,17 +313,21 @@ class Player:
         if card.card_type == 'Yellow': # handle Yellow cards
             print("Card is Yellow")
         elif card.card_type == 'Green': # handle Green cards
-            print("Card is Green")
+            effect = card.card_effect_passive.split('S')
+            if 'V' in effect:
+                self.victory_points += int(list(effect[0])[0])
+            science = 'science' + effect[1]
+            setattr(self, science, getattr(self, science) + 1)
         elif card.card_type == 'Purple': # handle Purple cards
             print("Card is Purple")
         else:
             # increase resources of player by card effect
-            cost = list(card.card_effect_passive)
+            effect = list(card.card_effect_passive)
             resource = ['C', 'W', 'S', 'P', 'G', 'V', 'M']
             resource_names = ['clay', 'wood', 'stone', 'paper', 'glass', 'victory_points', 'military_points']
-            if cost[1] in resource:
-                resource_name = resource_names[resource.index(cost[1])]
-                setattr(self, resource_name, getattr(self, resource_name) + int(cost[0]))
+            if effect[1] in resource:
+                resource_name = resource_names[resource.index(effect[1])]
+                setattr(self, resource_name, getattr(self, resource_name) + int(effect[0]))
         self.cards_in_play.append(card)
         return
 
