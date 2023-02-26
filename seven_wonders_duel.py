@@ -61,6 +61,10 @@ class Game:
             image_dict, selectable_dict, max_row = self.show_board()
             image = ImageDisplay(220, 350)
             if choice == "show":
+                image_dict[-1] = [card.card_name.replace(" ", "").lower() for card in self.players[0].cards_in_play]
+                selectable_dict[-1] = [1] * len(image_dict[-1])
+                image_dict[-2] = [card.card_name.replace(" ", "").lower() for card in self.players[1].cards_in_play]
+                selectable_dict[-2] = [1] * len(image_dict[-2])
                 image.display_row(image_dict, selectable_dict, max_row)
             else:
                 image.display_board(image_dict, selectable_dict, max_row)
