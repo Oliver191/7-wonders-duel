@@ -116,7 +116,7 @@ class Game:
         # Discard or construct chosen card and remove card from board
         if action == 'c':
             # Add card to board.
-            if self.card_constructable(player_state, chosen_position.card_in_slot) is True:
+            if self.card_constructable(player_state, opponent_state, chosen_position.card_in_slot) is True:
                 player_state.construct_card(chosen_position.card_in_slot, player_board, opponent_board)
             else:
                 print('You do not have the resources required to construct this card!')
@@ -148,16 +148,95 @@ class Game:
         return self.request_player_input()
 
     # Takes 2 Player objects and 1 Card object and checks whether card is constructable given state and cost.
-    # TODO Check whether card is constructable given arbitrary player/opponent/card objects
-    def card_constructable(self, player, card):
+    # TODO Implement trading when resources are not sufficient
+    def card_constructable(self, player, opponent, card):
         '''Checks whether a card is constructable given current player states'''
         cost, counts = np.unique(list(card.card_cost), return_counts=True) #split string and return unique values and their counts
+        trade_cost = 0
+        coins_needed = 0
         constructable = True
-        #iterate through all materials and players resources
-        for i, j in zip(['C', 'W', 'S', 'P', 'G', '$'], [player.clay, player.wood, player.stone, player.paper, player.glass, player.coins]):
+        cards = [card.card_name for card in player.cards_in_play]
+        net_cost = ''
+        # check if player has insufficient resources to construct the card
+        for i, j in zip(['C', 'W', 'S', 'P', 'G'], [player.clay, player.wood, player.stone, player.paper, player.glass]):
             if i in card.card_cost:
-                if counts[np.where(cost == i)[0]] > j: constructable = False
+                resources_needed = counts[np.where(cost == i)[0]][0]
+                if resources_needed > j:
+                    constructable = False
+                    net_cost += i*(resources_needed - j)
+        net_cost = self.variable_production(net_cost, cards, opponent) #Handle variable production
+        for i in list(net_cost): # calculates cost to trade for the resource
+            trade_cost += self.calculate_rate(i, cards, opponent)
+        if '$' in card.card_cost: #check if player has enough coins to construct the card
+            coins_needed = counts[np.where(cost == '$')[0]][0]
+            if coins_needed > player.coins:
+                constructable = False
+        if player.coins >= trade_cost + coins_needed: #trade for necessary resources to construct the card
+            constructable = True
+            player.coins -= trade_cost
         return constructable #False if cost or materials > players coins or materials
+
+    # Chooses the resource with the highest trading cost and uses variable production for it, if available
+    def variable_production(self, net_cost, cards, opponent):
+        if 'Forum' in cards:
+            if 'P' in net_cost and 'G' in net_cost:
+                p_rate = self.calculate_rate('P', cards, opponent)
+                g_rate = self.calculate_rate('G', cards, opponent)
+                if p_rate > g_rate:
+                    net_cost = net_cost.replace('P', '', 1)
+                else:
+                    net_cost = net_cost.replace('G', '', 1)
+            elif 'P' in net_cost:
+                net_cost = net_cost.replace('P', '', 1)
+            elif 'G' in net_cost:
+                net_cost = net_cost.replace('G', '', 1)
+        if 'Caravansery' in cards:
+            w_rate = self.calculate_rate('W', cards, opponent)
+            c_rate = self.calculate_rate('C', cards, opponent)
+            s_rate = self.calculate_rate('S', cards, opponent)
+            if 'W' in net_cost:
+                if 'C' in net_cost and 'S' in net_cost:
+                    if w_rate >= c_rate and w_rate >= s_rate:
+                        net_cost = net_cost.replace('W', '', 1)
+                    elif c_rate >= s_rate:
+                        net_cost = net_cost.replace('C', '', 1)
+                    else:
+                        net_cost = net_cost.replace('S', '', 1)
+                elif 'C' in net_cost:
+                    if w_rate >= c_rate:
+                        net_cost = net_cost.replace('W', '', 1)
+                    else:
+                        net_cost = net_cost.replace('C', '', 1)
+                elif 'S' in net_cost:
+                    if w_rate >= s_rate:
+                        net_cost = net_cost.replace('W', '', 1)
+                    else:
+                        net_cost = net_cost.replace('S', '', 1)
+                else:
+                    net_cost = net_cost.replace('W', '', 1)
+            elif 'C' in net_cost:
+                if 'S' in net_cost:
+                    if c_rate >= s_rate:
+                        net_cost = net_cost.replace('C', '', 1)
+                    else:
+                        net_cost = net_cost.replace('S', '', 1)
+                else:
+                    net_cost = net_cost.replace('C', '', 1)
+            elif 'S' in net_cost:
+                net_cost = net_cost.replace('S', '', 1)
+        return net_cost
+
+    # Calculates the rate at which a resource can be bought
+    def calculate_rate(self, resource, cards, opponent):
+        resource_counts = [opponent.clay, opponent.wood, opponent.stone, opponent.paper, opponent.glass]
+        rate = 2 + resource_counts[np.where(np.array(['C', 'W', 'S', 'P', 'G']) == resource)[0][0]]
+        #handle yellow cards fixing trading rates
+        for name, res in zip(['Stone Reserve', 'Clay Reserve', 'Wood Reserve'], ['S', 'C', 'W']):
+            if name in cards and resource == res:
+                rate = 1
+        if 'Customs House' in cards and resource in ['P', 'G']:
+            rate = 1
+        return rate
 
     # Takes 2 Player objects and 1 Card object and constructs the card if possible. If it cannot, returns False.
     def valid_moves(self, player, opponent, age):  # TODO Return list of valid moves for current player.
@@ -315,7 +394,21 @@ class Player:
         # TODO Change csv to have correct values and consider science, victory, military points or optional resources
         # increase player variables by resource card effect
         if card.card_type == 'Yellow': # handle Yellow cards
-            print("Card is Yellow")
+            effect = list(card.card_effect_passive)
+            if 'V' in effect: # Handle Age 3 Yellow Cards
+                self.victory_points += int(effect[0])
+                effect_active = card.card_effect_when_played.split(' per ')
+                for i in ['Grey', 'Brown', 'Red', 'Yellow']:
+                    if i in effect_active:
+                        type_count = len([1 for card in player_board if card.card_type == i])
+                        self.coins += type_count * int(list(effect_active[0])[0])
+                if 'Wonder' in effect_active:
+                    self.coins += len(self.wonders_in_play) * int(list(effect_active[0])[0])
+            elif '$' in card.card_effect_when_played: # Handle coin effect
+                effect_active = list(card.card_effect_when_played)
+                self.coins += int(effect_active[0])
+            # Variable production handled in variable_production function
+            # Fixed trading rates handled in calculate_rate function
         elif card.card_type == 'Green': # handle Green cards
             effect = card.card_effect_passive.split('S')
             if 'V' in effect:
@@ -334,12 +427,11 @@ class Player:
                     type_count = len([1 for card in player_board if card.card_type == i])
                     type_count = max(type_count, len([1 for card in opponent_board if card.card_type == i]))
                     self.coins += type_count
-        else:
-            # increase resources of player by card effect
+        else: # handle Blue, Brown, Grey, Red cards
             effect = list(card.card_effect_passive)
             resource = ['C', 'W', 'S', 'P', 'G', 'V', 'M']
             resource_names = ['clay', 'wood', 'stone', 'paper', 'glass', 'victory_points', 'military_points']
-            if effect[1] in resource:
+            if effect[1] in resource: # increase resources of player by card effect
                 resource_name = resource_names[resource.index(effect[1])]
                 setattr(self, resource_name, getattr(self, resource_name) + int(effect[0]))
         self.cards_in_play.append(card)
