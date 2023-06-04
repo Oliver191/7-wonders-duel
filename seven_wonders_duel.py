@@ -64,12 +64,11 @@ class Game:
             selectable_dict[-1] = [1] * len(image_dict[-1])
             image_dict[-2] = [card.card_name.replace(" ", "").lower() for card in self.players[1].cards_in_play]
             selectable_dict[-2] = [1] * len(image_dict[-2])
-            military_conflict = self.players[0].military_points - self.players[1].military_points
             if choice == "show":
                 image.display_row(image_dict, selectable_dict, max_row)
             else:
                 age = self.state_variables.current_age
-                image.display_board(image_dict, selectable_dict, max_row, age, military_conflict)
+                image.display_board(image_dict, selectable_dict, max_row, age, self.state_variables.military_track)
             print("Please choose a card!")
             return self.request_player_input()
 
@@ -134,7 +133,16 @@ class Game:
         chosen_position.card_in_slot = None
         player_state.update()
 
-        # Check for end of age (all cards drafted)
+        # Update military conflict and check for military victory
+        self.state_variables.update_military_track(self.players[0].military_points, self.players[1].military_points)
+        if self.state_variables.military_track >= 9:
+            self.display_game_state()
+            return print('Player 1 has won the Game through Military Supremacy!')
+        elif self.state_variables.military_track <= -9:
+            self.display_game_state()
+            return print('Player 2 has won the Game through Military Supremacy!')
+
+            # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
             self.state_variables.progress_age()
         else:  # Otherwise, update all cards in current age and change turn turn_player
@@ -143,7 +151,7 @@ class Game:
 
         if self.state_variables.game_end:
             self.display_game_state()
-            return print('Game is over!')  # TODO Check victory and stuff
+            return print('Game is over!')  # TODO Check civilian victory and stuff
 
         # Continue game loop.
         self.display_game_state()
@@ -468,6 +476,10 @@ class StateVariables:
             self.current_age = self.current_age + 1
         else:
             self.game_end = True
+
+    def update_military_track(self, military_points_1, military_points_2):
+        '''Function to update military track'''
+        self.military_track = military_points_1 - military_points_2
 
 class Age:
     '''Class to define a game age and represent the unique board layouts'''
