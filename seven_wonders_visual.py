@@ -118,7 +118,9 @@ class ImageDisplay:
     #                 self.running = False
     #     pygame.quit()
 
-    def display_board(self, image_dict, selectable_dict, max_row, age):
+    def display_board(self, image_dict, selectable_dict, max_row, age, military_conflict):
+        pygame.font.init()
+
         image_dict2 = image_dict.copy()
         del image_dict2[-1]
         del image_dict2[-2]
@@ -147,13 +149,35 @@ class ImageDisplay:
                         index -= 1
                     else:
                         self.running = False
-                    index = max(-2, min(index, 0))
+                    index = max(-2, min(index, 1))
                     combined_image.fill((0, 0, 0))
                     self.screen.blit(combined_image, (0, 0))
                     pygame.display.update()
-                    if index >= 0:
+                    if index == 0:
                         self.screen = pygame.display.set_mode((max_width * scale, max_height * scale))
                         combined_image = self.board(max_width, max_height, image_dict2, selectable_dict, max_row, scale, age)
+                    elif index > 0:
+                        pygame.display.set_caption("Military & Science Board")
+                        names = ["board", "military5", "military2", "conflict"]
+                        self.screen = pygame.display.set_mode((1639, 490))
+                        combined_image = pygame.image.load(f"images\{names[0]}.png").convert_alpha()
+                        img = pygame.image.load(f"images\{names[1]}.png").convert_alpha()
+                        img = pygame.transform.scale(img, (200, 90))
+                        combined_image.blit(img, (170, 350))
+                        combined_image.blit(img, (1265, 350))
+                        img = pygame.image.load(f"images\{names[2]}.png").convert_alpha()
+                        img = pygame.transform.scale(img, (180, 80))
+                        combined_image.blit(img, (420, 355))
+                        combined_image.blit(img, (1044, 355))
+                        img = pygame.image.load(f"images\{names[3]}.png").convert_alpha()
+                        img = pygame.transform.scale(img, (75, 200))
+                        combined_image.blit(img, (780+(military_conflict*78), 185))
+
+                        img = pygame.font.Font(None, 60)
+                        text_surface = img.render("City Player 1", True, (255, 255, 255))
+                        combined_image.blit(text_surface, (100, 100))
+                        text_surface = img.render("City Player 2", True, (255, 255, 255))
+                        combined_image.blit(text_surface, (1280, 100))
                     elif index < 0:
                         multiple = self.get_multiple(7, len(image_dict[index]))
                         pygame.display.set_caption("Player " + str(abs(index)))
