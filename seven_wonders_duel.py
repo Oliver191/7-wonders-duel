@@ -157,6 +157,8 @@ class Game:
         constructable = True
         cards = [card.card_name for card in player.cards_in_play]
         net_cost = ''
+        if card.card_prerequisite in cards: #free construction condition
+            return constructable
         # check if player has insufficient resources to construct the card
         for i, j in zip(['C', 'W', 'S', 'P', 'G'], [player.clay, player.wood, player.stone, player.paper, player.glass]):
             if i in card.card_cost:
@@ -385,10 +387,11 @@ class Player:
     # TODO Function to construct card (pay resources, add card to player board, gain on buy benefit)
     # removal of card from game board is done elsewhere! (in Game.select_card method).
     def construct_card(self, card, player_board, opponent_board):
-        '''Fucntion to construct a card in a players tableau'''
+        '''Function to construct a card in a players tableau'''
         # decrease coins of player by card cost
         cost, counts = np.unique(list(card.card_cost), return_counts=True)  # split string and return unique values and their counts
-        if '$' in card.card_cost:
+        cards = [card.card_name for card in player_board]
+        if '$' in card.card_cost and card.card_prerequisite not in cards: #free construction condition
             self.coins -= counts[np.where(cost == '$')[0]][0] # decrease coins by card cost
 
         # TODO Change csv to have correct values and consider science, victory, military points or optional resources
