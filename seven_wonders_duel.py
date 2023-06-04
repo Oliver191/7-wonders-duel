@@ -288,10 +288,18 @@ class Game:
         age = self.state_variables.current_age
 
         self.age_boards[age].display_board()
+        print("Military Track : " + self.display_military_board())
         print("Player 1 >", self.players[0])
         print("Player 2 >", self.players[1])
         print("")
         print("Current turn player is Player ", str(player + 1))
+
+    def display_military_board(self):
+        military = self.state_variables.military_track
+        board = (max(0, military+9))*'0' + '1' + (max(0, 9-military))*'0'
+        board = '[' + board[0] + '|' + board[1:4] + '|' + board[4:7] + '|' + board[7:9] + '|' + board[9] + '|' + \
+            board[10:12] + '|' + board[12:15] + '|' + board[15:18] + '|' + board[18] + ']'
+        return board
         
 class Card:
     '''Define a single card. Attributes match the .csv headers'''
