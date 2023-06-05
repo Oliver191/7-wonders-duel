@@ -33,11 +33,11 @@ Caravansery,Base,Yellow,$$GP,1W or 1C or 1S,,2,
 Customs House,Base,Yellow,$$$$,1P1G,,2,
 Courthouse,Base,Blue,WWG,5V,,2,
 Horse Breeders,Base,Red,CW,1M,,2,Stable
-Barracks,Base,Red,$$$$,1M,,2,Garrison
+Barracks,Base,Red,$$$,1M,,2,Garrison
 Archery Range,Base,Red,SWP,2M,,2,
 Parade Ground,Base,Red,CCG,2M,,2,
-Library,Base,Green,SWG,3VS3,,2,Scriptorium
-Dispensary,Base,Green,CCS,3VS4,,2,Pharmacist
+Library,Base,Green,SWG,2VS3,,2,Scriptorium
+Dispensary,Base,Green,CCS,2VS4,,2,Pharmacist
 School,Base,Green,WPP,1VS2,,2,
 Laboratory,Base,Green,WGG,1VS1,,2,
 Statue,Base,Blue,CC,4V,,2,Theatre
