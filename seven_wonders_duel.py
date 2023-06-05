@@ -142,6 +142,9 @@ class Game:
             self.display_game_state()
             return print('Player 2 has won the Game through Military Supremacy!')
 
+        # Award victory points based on conflict pawn location
+        self.update_conflict_points()
+
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
             self.state_variables.progress_age()
@@ -294,13 +297,49 @@ class Game:
         print("")
         print("Current turn player is Player ", str(player + 1))
 
+    # Displays the military conflict in the command line
     def display_military_board(self):
         military = self.state_variables.military_track
-        board = (max(0, military+9))*'0' + '1' + (max(0, 9-military))*'0'
+        board = (max(0, min(18, military+9)))*'0' + '1' + (max(0, min(18, 9-military)))*'0'
         board = '[' + board[0] + '|' + board[1:4] + '|' + board[4:7] + '|' + board[7:9] + '|' + board[9] + '|' + \
             board[10:12] + '|' + board[12:15] + '|' + board[15:18] + '|' + board[18] + ']'
         return board
-        
+
+    # Grants victory points based on conflict pawn location
+    def update_conflict_points(self):
+        military = self.state_variables.military_track
+        # keep track of old victory points (points_awarded)
+        points_awarded = self.state_variables.victory_points_awarded
+        # calculate new victory points (points)
+        if abs(military) in [0]:
+            points = 0
+        elif abs(military) in [1, 2]:
+            points = 2
+        elif abs(military) in [3, 4, 5]:
+            points = 5
+        elif abs(military) >= 6:
+            points = 10
+
+        if military >= 0:
+            if points_awarded >= 0:
+                points_change = points - points_awarded
+                self.players[0].victory_points += points_change
+                #player 2 points unaffected
+            else: #points_awarded < 0
+                self.players[0].victory_points += points
+                self.players[1].victory_points += points_awarded #points_awarded<0
+        else: #military < 0
+            if points_awarded > 0:
+                self.players[0].victory_points -= points_awarded
+                self.players[1].victory_points += points
+            else: #points_awarded <= 0
+                points_change = points - abs(points_awarded)
+                #player 1 points unaffected
+                self.players[1].victory_points += points_change
+        if military < 0:
+            points = points * (-1)
+        self.state_variables.victory_points_awarded = points
+
 class Card:
     '''Define a single card. Attributes match the .csv headers'''
     colour_key = {
@@ -472,6 +511,7 @@ class StateVariables:
         self.current_age = current_age  # Start in first age.
         self.military_track = military_track  # Start military track at 0.
         self.game_end = False
+        self.victory_points_awarded = 0
 
     def change_turn_player(self):
         '''Function to change current turn player'''
