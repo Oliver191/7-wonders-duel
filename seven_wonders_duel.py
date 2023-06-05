@@ -36,6 +36,9 @@ class Game:
         choice = input("PLAYER " + str(self.state_variables.turn_player + 1) + ": "
                        + "Select a card to [c]onstruct or [d]iscard for coins. ")
                        #+ "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
+        if choice == '':
+            print("Select a valid action! (construct or discard)")
+            return self.request_player_input()
         action, position = choice[0], choice[1:]
 
         if action == 'q':
@@ -68,7 +71,10 @@ class Game:
                 image.display_row(image_dict, selectable_dict, max_row)
             else:
                 age = self.state_variables.current_age
-                image.display_board(image_dict, selectable_dict, max_row, age, self.state_variables.military_track, self.state_variables.military_tokens)
+                military = self.state_variables.military_track
+                tokens = self.state_variables.military_tokens
+                coins = {-1 : self.players[0].coins, -2 : self.players[1].coins}
+                image.display_board(image_dict, selectable_dict, max_row, age, military, tokens, coins)
             print("Please choose a card!")
             return self.request_player_input()
 
@@ -156,8 +162,32 @@ class Game:
             self.state_variables.change_turn_player()  # TODO This might not always be true if go again wonders chosen
 
         if self.state_variables.game_end:
+            # Civilian victory: 1 victory point for every 3 coins
+            self.players[0].victory_points += self.players[0].coins // 3
+            self.players[1].victory_points += self.players[1].coins // 3
             self.display_game_state()
-            return print('Game is over!')  # TODO Check civilian victory and stuff
+
+            # Handle Civilian Victory
+            print('Victory Points Player 1: ', self.players[0].victory_points)
+            print('Victory Points Player 2: ', self.players[1].victory_points)
+            if self.players[0].victory_points > self.players[1].victory_points:
+                print('Player 1 has won the Game through Civilian Victory!')
+            elif self.players[0].victory_points < self.players[1].victory_points:
+                print('Player 2 has won the Game through Civilian Victory!')
+            else:
+                print('Both players have the same number of victory points.')
+                p1_blue_vp = sum([int(card.card_effect_passive[0]) for card in self.players[0].cards_in_play if card.card_type == 'Blue'])
+                p2_blue_vp = sum([int(card.card_effect_passive[0]) for card in self.players[1].cards_in_play if card.card_type == 'Blue'])
+                print('Victory Points Civilian Buildings Player 1: ', p1_blue_vp)
+                print('Victory Points Civilian Buildings Player 2: ', p2_blue_vp)
+                if p1_blue_vp > p2_blue_vp:
+                    print('Player 1 has won the Game with the most victory points from Civilian Buildings!')
+                elif p1_blue_vp < p2_blue_vp:
+                    print('Player 2 has won the Game with the most victory points from Civilian Buildings!')
+                else:
+                    print('Both players have the same number of victory points from Civilian Buildings.')
+                    print('The game ends in a draw!')
+            return
 
         # Continue game loop.
         self.display_game_state()
@@ -491,7 +521,7 @@ class Player:
             # Fixed trading rates handled in calculate_rate function
         elif card.card_type == 'Green': # handle Green cards
             effect = card.card_effect_passive.split('S')
-            if 'V' in effect:
+            if 'V' in effect[0]:
                 self.victory_points += int(list(effect[0])[0])
             science = 'science' + effect[1]
             setattr(self, science, getattr(self, science) + 1)
@@ -501,7 +531,6 @@ class Player:
                 type_count = len([1 for card in player_board if card.card_type in ['Grey', 'Brown']])
                 type_count = max(type_count, len([1 for card in opponent_board if card.card_type in ['Grey', 'Brown']]))
                 self.coins += type_count
-
             for i in ['Yellow', 'Blue', 'Green', 'Red']:
                 if i in card.card_effect_when_played.split():
                     type_count = len([1 for card in player_board if card.card_type == i])
