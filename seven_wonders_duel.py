@@ -68,7 +68,7 @@ class Game:
                 image.display_row(image_dict, selectable_dict, max_row)
             else:
                 age = self.state_variables.current_age
-                image.display_board(image_dict, selectable_dict, max_row, age, self.state_variables.military_track)
+                image.display_board(image_dict, selectable_dict, max_row, age, self.state_variables.military_track, self.state_variables.military_tokens)
             print("Please choose a card!")
             return self.request_player_input()
 
@@ -144,6 +144,9 @@ class Game:
 
         # Award victory points based on conflict pawn location
         self.update_conflict_points()
+
+        # Grant military tokens
+        self.grant_military_token()
 
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
@@ -340,6 +343,23 @@ class Game:
             points = points * (-1)
         self.state_variables.victory_points_awarded = points
 
+    # Grants military tokens based on military track (opposing player loses coins)
+    def grant_military_token(self):
+        tokens = self.state_variables.military_tokens
+        military_track = self.state_variables.military_track
+        if tokens[0] == 0 and military_track <= -6:
+            self.players[0].coins = max(0, self.players[0].coins - 5)
+            self.state_variables.military_tokens[0] = 1
+        elif tokens[1] == 0 and military_track <= -3:
+            self.players[0].coins = max(0, self.players[0].coins - 2)
+            self.state_variables.military_tokens[1] = 1
+        elif tokens[2] == 0 and military_track >= 3:
+            self.players[1].coins = max(0, self.players[1].coins - 2)
+            self.state_variables.military_tokens[2] = 1
+        elif tokens[3] == 0 and military_track >= 6:
+            self.players[1].coins = max(0, self.players[1].coins - 5)
+            self.state_variables.military_tokens[3] = 1
+
 class Card:
     '''Define a single card. Attributes match the .csv headers'''
     colour_key = {
@@ -512,6 +532,7 @@ class StateVariables:
         self.military_track = military_track  # Start military track at 0.
         self.game_end = False
         self.victory_points_awarded = 0
+        self.military_tokens = [0,0,0,0]
 
     def change_turn_player(self):
         '''Function to change current turn player'''
