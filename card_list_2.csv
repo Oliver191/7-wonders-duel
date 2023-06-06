@@ -57,7 +57,7 @@ University;Base;Green;CGP;2VS6;;3;School;;
 Observatory;Base;Green;SPP;2VS6;;3;Laboratory;;
 Merchants Guild;Base;Purple;CWGP;1V per Yellow;1$ per Yellow;Guild;;;
 Shipowners Guild;Base;Purple;CSGP;1V per Grey or 1V per Brown;1$ per Grey or $ per Brown;Guild;;;
-Builders Guild;Base;Purple;SSCWG;2V;;Guild;;;
+Builders Guild;Base;Purple;SSCWG;2V per Wonder;;Guild;;;
 Magistrates Guild;Base;Purple;WWCP;1V per Blue;1$ per Blue;Guild;;;
 Scientists Guild;Base;Purple;CCWW;1V per Green;1$ per Green;Guild;;;
 Moneylenders Guild;Base;Purple;SSWW;1V per $$$;;Guild;;;

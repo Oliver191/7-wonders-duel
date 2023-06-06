@@ -174,7 +174,14 @@ class Game:
             self.display_game_state()
             return print('Player 2 has won the Game through Scientific Victory!')
 
-        # TODO Handle victory points from purple cards
+        # Award victory points based on purple cards
+        if self.state_variables.current_age == 2: #only check in Age 3 to reduce computations
+            card_effects = [card.card_effect_passive for card in self.players[0].cards_in_play if card.card_type == 'Purple']
+            if len(card_effects) > 0:
+                self.update_guild_points(card_effects, 0)
+            card_effects = [card.card_effect_passive for card in self.players[1].cards_in_play if card.card_type == 'Purple']
+            if len(card_effects) > 0:
+                self.update_guild_points(card_effects, 1)
 
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
@@ -411,6 +418,37 @@ class Game:
             self.players[1].coins = max(0, self.players[1].coins - 5)
             self.state_variables.military_tokens[3] = 1
 
+    # Grants victory points based on purple (guild) cards
+    def update_guild_points(self, card_effects, player):
+        cards_player_1 = self.players[0].cards_in_play
+        cards_player_2 = self.players[1].cards_in_play
+        colors = ['Yellow', 'Blue', 'Green', 'Red']
+        card_counts = self.state_variables.max_card_counts.copy()
+        for effect in card_effects:
+            color = effect.split()[2]
+            if 'Grey' in effect.split() and 'Brown' in effect.split():
+                type_count = len([1 for card in cards_player_1 if card.card_type in ['Grey', 'Brown']])
+                type_count = max(type_count, len([1 for card in cards_player_2 if card.card_type in ['Grey', 'Brown']]))
+                self.state_variables.max_card_counts[0] = type_count
+                type_count -= card_counts[0]
+            elif 'Wonder' in effect.split():
+                type_count = len(self.players[0].wonders_in_play)
+                type_count = max(type_count, len(self.players[1].wonders_in_play))
+                type_count *= 2 #wonders are worth 2 victory points instead of 1
+                self.state_variables.max_card_counts[1] = type_count
+                type_count -= card_counts[1]
+            elif '$$$' in effect.split():
+                type_count = self.players[0].coins // 3
+                type_count = max(type_count, self.players[1].coins // 3)
+                self.state_variables.max_card_counts[2] = type_count
+                type_count -= card_counts[2]
+            else: #handle 'Yellow', 'Blue', 'Green', 'Red'
+                type_count = len([1 for card in cards_player_1 if card.card_type == color])
+                type_count = max(type_count, len([1 for card in cards_player_2 if card.card_type == color]))
+                self.state_variables.max_card_counts[colors.index(color)+3] = type_count
+                type_count -= card_counts[colors.index(color)+3]
+            self.players[player].victory_points += type_count
+
 class Card:
     '''Define a single card. Attributes match the .csv headers'''
     colour_key = {
@@ -576,6 +614,7 @@ class StateVariables:
         self.victory_points_awarded = 0
         self.military_tokens = [0,0,0,0]
         self.turn_choice = False
+        self.max_card_counts = [0,0,0,0,0,0,0]
 
     def change_turn_player(self):
         '''Function to change current turn player'''
