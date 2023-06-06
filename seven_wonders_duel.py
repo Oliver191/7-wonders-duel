@@ -27,6 +27,8 @@ class Game:
 
         # TODO: Draft wonders function
 
+        # TODO: Draft Progress Tokens
+
     def request_player_input(self):  # TODO When using AI, no need for player input, just needs to print AI choice.
         """Function to begin requesting player input
 
@@ -154,6 +156,16 @@ class Game:
         # Grant military tokens
         self.grant_military_token()
 
+        # Check for scientific victory
+        if all([symbol >= 1 for symbol in self.players[0].science]):
+            self.display_game_state()
+            return print('Player 1 has won the Game through Scientific Victory!')
+        elif all([symbol >= 1 for symbol in self.players[1].science]):
+            self.display_game_state()
+            return print('Player 2 has won the Game through Scientific Victory!')
+
+        # TODO Handle victory points from purple cards
+
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
             self.state_variables.progress_age()
@@ -194,7 +206,6 @@ class Game:
         return self.request_player_input()
 
     # Takes 2 Player objects and 1 Card object and checks whether card is constructable given state and cost.
-    # TODO Implement trading when resources are not sufficient
     def card_constructable(self, player, opponent, card):
         '''Checks whether a card is constructable given current player states'''
         cost, counts = np.unique(list(card.card_cost), return_counts=True) #split string and return unique values and their counts
@@ -471,12 +482,7 @@ class Player:
         self.paper = 0
         self.glass = 0
         self.victory_tokens = []
-        self.science1 = 0
-        self.science2 = 0
-        self.science3 = 0
-        self.science4 = 0
-        self.science5 = 0
-        self.science6 = 0
+        self.science = [0,0,0,0,0,0]
 
     def __repr__(self):
         return str(" Coins: " + repr(self.coins)
@@ -487,11 +493,10 @@ class Player:
                    + " S" + repr(self.stone)
                    + " P" + repr(self.paper)
                    + " G" + repr(self.glass)
-                   + ", Science: " + repr(self.science1) + ' ' + repr(self.science2) + ' ' + repr(self.science3)
-                   + ' ' + repr(self.science4) + ' ' + repr(self.science5) + ' ' + repr(self.science6)
+                   + ", Science: " + repr(self.science[0]) + ' ' + repr(self.science[1]) + ' ' + repr(self.science[2])
+                   + ' ' + repr(self.science[3]) + ' ' + repr(self.science[4]) + ' ' + repr(self.science[5])
                    + ",\n Board: " + repr(self.cards_in_play))
 
-    # TODO Function to construct card (pay resources, add card to player board, gain on buy benefit)
     # removal of card from game board is done elsewhere! (in Game.select_card method).
     def construct_card(self, card, player_board, opponent_board):
         '''Function to construct a card in a players tableau'''
@@ -501,7 +506,6 @@ class Player:
         if '$' in card.card_cost and card.card_prerequisite not in cards: #free construction condition
             self.coins -= counts[np.where(cost == '$')[0]][0] # decrease coins by card cost
 
-        # TODO Change csv to have correct values and consider science, victory, military points or optional resources
         # increase player variables by resource card effect
         if card.card_type == 'Yellow': # handle Yellow cards
             effect = list(card.card_effect_passive)
@@ -523,8 +527,7 @@ class Player:
             effect = card.card_effect_passive.split('S')
             if 'V' in effect[0]:
                 self.victory_points += int(list(effect[0])[0])
-            science = 'science' + effect[1]
-            setattr(self, science, getattr(self, science) + 1)
+            self.science[int(effect[1])-1] += 1
         elif card.card_type == 'Purple': # handle Purple cards
             # 1 coin for each card of type in city with most cards
             if 'Grey' in card.card_effect_when_played.split() and 'Brown' in card.card_effect_when_played.split():
