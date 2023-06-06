@@ -35,13 +35,26 @@ class Game:
         Returns:
             void: [description]
         """
+        if self.state_variables.turn_choice:
+            print("")
+            print("As the player with the weaker military, you are allowed to choose who begins the next Age.")
+            print("Enter [turn] to allow your opponent to begin.")
+            print("Otherwise continue playing:")
+
         choice = input("PLAYER " + str(self.state_variables.turn_player + 1) + ": "
                        + "Select a card to [c]onstruct or [d]iscard for coins. ")
                        #+ "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
+
         if choice == '':
             print("Select a valid action! (construct or discard)")
             return self.request_player_input()
         action, position = choice[0], choice[1:]
+
+        if choice == 'turn' and self.state_variables.turn_choice:
+            print("Opponent is chosen to begin.")
+            self.state_variables.turn_choice = False
+            self.state_variables.change_turn_player()
+            return self.request_player_input()
 
         if action == 'q':
             return print("Game has been quit")
@@ -55,10 +68,6 @@ class Game:
             self.state_variables.progress_age()
             self.display_game_state()
             print("Board has been cleared!")
-            return self.request_player_input()
-
-        if choice == 'again': #to display game state again
-            self.display_game_state()
             return self.request_player_input()
 
         if action == 's':
@@ -138,6 +147,7 @@ class Game:
             print('This is not a valid action!')
             return self.request_player_input()
 
+        self.state_variables.turn_choice = False
         chosen_position.card_in_slot = None
         player_state.update()
 
@@ -565,6 +575,7 @@ class StateVariables:
         self.game_end = False
         self.victory_points_awarded = 0
         self.military_tokens = [0,0,0,0]
+        self.turn_choice = False
 
     def change_turn_player(self):
         '''Function to change current turn player'''
@@ -572,9 +583,14 @@ class StateVariables:
 
     def progress_age(self):
         '''Function to progress age and end game if required'''
-        # TODO For progress age function: check military track for turn player and deal with end of game.
         if self.current_age < 2:
             self.current_age = self.current_age + 1
+            if self.military_track > 0 and self.turn_player == 0:
+                self.change_turn_player() #if player 1 has stronger military, change to player 2
+            elif self.military_track < 0 and self.turn_player == 1:
+                self.change_turn_player() #if player 2 has stronger military, change to player 1
+            #in case military is balanced, last active player remains
+            self.turn_choice = True #Allow the player to choose who begins the next Age
         else:
             self.game_end = True
 
