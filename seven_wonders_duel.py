@@ -19,6 +19,7 @@ class Game:
         self.game_count = game_count
         self.players = [Player(0, 'human'), Player(1, 'human')]
         self.state_variables = StateVariables()
+        # TODO initialize progress tokens
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
 
@@ -26,8 +27,6 @@ class Game:
         return repr('Game Instance: ' + str(self.game_count))
 
         # TODO: Draft wonders function
-
-        # TODO: Draft Progress Tokens
 
     def request_player_input(self):  # TODO When using AI, no need for player input, just needs to print AI choice.
         """Function to begin requesting player input
@@ -81,6 +80,8 @@ class Game:
             if choice == "show":
                 image.display_row(image_dict, selectable_dict, max_row)
             else:
+                # TODO Add display of available progress tokens on military board
+                # TODO Add display of owned progress tokens on player board
                 age = self.state_variables.current_age
                 military = self.state_variables.military_track
                 tokens = self.state_variables.military_tokens
@@ -182,6 +183,9 @@ class Game:
             card_effects = [card.card_effect_passive for card in self.players[1].cards_in_play if card.card_type == 'Purple']
             if len(card_effects) > 0:
                 self.update_guild_points(card_effects, 1)
+
+        # TODO Create a check which allows progress token selection when 2 matching scientific symbols are collected
+        # TODO Request player input to select one of the tokens and delete it from board -> Create select_token function
 
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
@@ -357,6 +361,7 @@ class Game:
         print("Player 2 >", self.players[1])
         print("")
         print("Current turn player is Player ", str(player + 1))
+        # TODO Print a representation of available tokens
 
     # Displays the military conflict in the command line
     def display_military_board(self):
@@ -507,6 +512,10 @@ class CardSlot:
                    + repr(self.card_in_slot)
                    )
 
+# TODO create a ProgressToken Class to read token attributes from csv, save them in init, randomly slot 5 into PorgressTokenSlot (see Age class)
+
+# TODO Create PorgressTokenSlot Class to slot tokens into
+
 class Player:
     '''Define a class for play to track tableau cards, money, etc.'''
 
@@ -520,6 +529,7 @@ class Player:
         self.cards_in_play = []
         self.wonders_in_hand = []
         self.wonders_in_play = []
+        self.progress_tokens_in_play = []
 
         # Passive variables can be updated anytime based on cards_in_play via self.update() method.
         self.victory_points = 0
@@ -544,6 +554,7 @@ class Player:
                    + ", Science: " + repr(self.science[0]) + ' ' + repr(self.science[1]) + ' ' + repr(self.science[2])
                    + ' ' + repr(self.science[3]) + ' ' + repr(self.science[4]) + ' ' + repr(self.science[5])
                    + ",\n Board: " + repr(self.cards_in_play))
+    # TODO Add progress_tokens_in_play to __repr__ function
 
     # removal of card from game board is done elsewhere! (in Game.select_card method).
     def construct_card(self, card, player_board, opponent_board):
@@ -600,6 +611,8 @@ class Player:
     def update(self):
         '''Updates player passive variables based on players tableau'''
         return
+
+    # TODO Create construct_progress_token function to apply their effects and append them to progress_tokens_in_play
 
 class StateVariables:
     '''Class to represent all state variables shared between players (military, turn player, etc.)'''
