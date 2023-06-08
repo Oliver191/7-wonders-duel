@@ -4,12 +4,6 @@ from numpy.random import default_rng
 from sty import fg, bg, rs
 from seven_wonders_visual import ImageDisplay
 
-# TODO:
-# Change pd dataframe into numpy array -> Adjusted to np.array
-# Configured card_constructable function to only allow constructing cards when enough money is available
-
-# Configured construct_card to decrease coins when card is constructed
-
 class Game:
     '''Define a single instance of a game'''
 
@@ -19,7 +13,7 @@ class Game:
         self.game_count = game_count
         self.players = [Player(0, 'human'), Player(1, 'human')]
         self.state_variables = StateVariables()
-        # TODO initialize progress tokens
+        self.progress_board = PorgressBoard()
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
 
@@ -69,24 +63,16 @@ class Game:
             print("Board has been cleared!")
             return self.request_player_input()
 
-        if action == 's':
-            # Display the whole row if an action with s is entered
+        if action == 's': #Display a visual representation of the game
             image_dict, selectable_dict, max_row = self.show_board()
             image = ImageDisplay(220, 350)
-            image_dict[-1] = [card.card_name.replace(" ", "").lower() for card in self.players[0].cards_in_play]
-            selectable_dict[-1] = [1] * len(image_dict[-1])
-            image_dict[-2] = [card.card_name.replace(" ", "").lower() for card in self.players[1].cards_in_play]
-            selectable_dict[-2] = [1] * len(image_dict[-2])
-            if choice == "show":
-                image.display_row(image_dict, selectable_dict, max_row)
-            else:
-                # TODO Add display of available progress tokens on military board
-                # TODO Add display of owned progress tokens on player board
-                age = self.state_variables.current_age
-                military = self.state_variables.military_track
-                tokens = self.state_variables.military_tokens
-                coins = {-1 : self.players[0].coins, -2 : self.players[1].coins}
-                image.display_board(image_dict, selectable_dict, max_row, age, military, tokens, coins)
+            # TODO Add display of available progress tokens on military board
+            # TODO Add display of owned progress tokens on player board
+            age = self.state_variables.current_age
+            military = self.state_variables.military_track
+            tokens = self.state_variables.military_tokens
+            coins = {-1 : self.players[0].coins, -2 : self.players[1].coins}
+            image.display_board(image_dict, selectable_dict, max_row, age, military, tokens, coins)
             print("Please choose a card!")
             return self.request_player_input()
 
@@ -184,8 +170,14 @@ class Game:
             if len(card_effects) > 0:
                 self.update_guild_points(card_effects, 1)
 
-        # TODO Create a check which allows progress token selection when 2 matching scientific symbols are collected
-        # TODO Request player input to select one of the tokens and delete it from board -> Create select_token function
+        # If 2 matching scientific symbols are collected, allow progress token selection
+        tokens_awarded = self.state_variables.progress_tokens_awarded
+        match_science = [True if self.players[player].science[i] >= 2 and not tokens_awarded[i] else False for i in range(len(self.players[player].science))]
+        if any(match_science):
+            self.state_variables.progress_tokens_awarded[match_science.index(True)] = True
+            token = self.select_token()
+            self.players[player].construct_token(token, self.progress_board)
+            self.progress_board.tokens[token].token_in_slot = False
 
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
@@ -306,6 +298,45 @@ class Game:
                 net_cost = net_cost.replace('S', '', 1)
         return net_cost
 
+    # Requests player input to select one of the tokens still available where token_in_slot == True
+    def select_token(self):
+        print("")
+        print("Player " + str(self.state_variables.turn_player + 1) +
+              " gathered 2 matching scientific symbols.")
+        choice = input("PLAYER " + str(self.state_variables.turn_player + 1) + ": "
+                       + "Please [c]onstruct a progress token from the Board. ")
+        if choice == '':
+            print('This is not a valid action!')
+            return self.select_token()
+        action, position = choice[0], choice[1:]
+        if action == 's': #Display a visual representation of the game
+            image_dict, selectable_dict, max_row = self.show_board()
+            image = ImageDisplay(220, 350)
+            # TODO Copy adjusted function from above
+            age = self.state_variables.current_age
+            military = self.state_variables.military_track
+            tokens = self.state_variables.military_tokens
+            coins = {-1 : self.players[0].coins, -2 : self.players[1].coins}
+            image.display_board(image_dict, selectable_dict, max_row, age, military, tokens, coins)
+            print("Please choose a token!")
+            return self.select_token()
+        elif action == 'c':
+            if position == '':
+                print('This is not a valid action!')
+                return self.select_token()
+            elif int(position) in range(len(self.progress_board.tokens)):
+                if self.progress_board.tokens[int(position)].token_in_slot:
+                    return int(position)
+                else:
+                    print('This token has already been chosen!')
+                    return self.select_token()
+            else:
+                print('Select a valid token on the board!')
+                return self.select_token()
+        else:
+            print('This is not a valid action!')
+            return self.select_token()
+
     # Calculates the rate at which a resource can be bought
     def calculate_rate(self, resource, cards, opponent):
         resource_counts = [opponent.clay, opponent.wood, opponent.stone, opponent.paper, opponent.glass]
@@ -347,6 +378,10 @@ class Game:
             row = int(slots_in_age[j].row)
             image_dict[row].append(path)  # fill the dictionary with each path per row
             selectable_dict[row].append(selectable)
+        image_dict[-1] = [card.card_name.replace(" ", "").lower() for card in self.players[0].cards_in_play]
+        selectable_dict[-1] = [1] * len(image_dict[-1])
+        image_dict[-2] = [card.card_name.replace(" ", "").lower() for card in self.players[1].cards_in_play]
+        selectable_dict[-2] = [1] * len(image_dict[-2])
         return image_dict, selectable_dict, max_row
 
     # Displays the game state in a nice enough way.
@@ -355,13 +390,13 @@ class Game:
         player = self.state_variables.turn_player
         age = self.state_variables.current_age
 
-        self.age_boards[age].display_board()
+        print("Progress Tokens :", self.progress_board)
         print("Military Track : " + self.display_military_board())
+        self.age_boards[age].display_board()
         print("Player 1 >", self.players[0])
         print("Player 2 >", self.players[1])
         print("")
         print("Current turn player is Player ", str(player + 1))
-        # TODO Print a representation of available tokens
 
     # Displays the military conflict in the command line
     def display_military_board(self):
@@ -512,9 +547,46 @@ class CardSlot:
                    + repr(self.card_in_slot)
                    )
 
-# TODO create a ProgressToken Class to read token attributes from csv, save them in init, randomly slot 5 into PorgressTokenSlot (see Age class)
+class ProgressToken:
+    '''Define a single progress token'''
 
-# TODO Create PorgressTokenSlot Class to slot tokens into
+    def __init__(self, token_name=0, token_effect_passive=0, token_effect_when_played=0, token_in_slot = False):
+        self.token_name = token_name
+        self.token_effect_passive = token_effect_passive
+        self.token_effect_when_played = token_effect_when_played
+        self.token_in_slot = token_in_slot
+
+    def __repr__(self):
+        return str(bg(0, 70, 0) + fg.white
+                   + self.token_name
+                   + rs.all)
+
+class PorgressBoard:
+    '''Define the progress board in which the progress tokens are slotted into'''
+
+    def __init__(self):
+        self.tokens = self.prepare_progress_board()
+
+    def __repr__(self):
+        board = '['
+        for token in self.tokens:
+            if token.token_in_slot:
+                board += '#' + str(self.tokens.index(token)) + ' ' + str(token)
+            board += ', '
+        board = board[:-2]
+        board += ']'
+        return board
+        # return str([token if token.token_in_slot else '' for token in self.tokens])
+
+    # read tokens, randomly select 5, and slot them into the board
+    def prepare_progress_board(self):
+        token_count = 5
+        token_list = np.genfromtxt('progress_tokens.csv', delimiter=',', skip_header=1, dtype=str)
+        chosen_tokens = token_list[np.random.choice(token_list.shape[0], token_count, replace=False)]
+        tokens = []
+        for token in chosen_tokens:
+            tokens.append(ProgressToken(token[0], token[1], token[2], True))
+        return tokens
 
 class Player:
     '''Define a class for play to track tableau cards, money, etc.'''
@@ -553,8 +625,8 @@ class Player:
                    + " G" + repr(self.glass)
                    + ", Science: " + repr(self.science[0]) + ' ' + repr(self.science[1]) + ' ' + repr(self.science[2])
                    + ' ' + repr(self.science[3]) + ' ' + repr(self.science[4]) + ' ' + repr(self.science[5])
-                   + ",\n Board: " + repr(self.cards_in_play))
-    # TODO Add progress_tokens_in_play to __repr__ function
+                   + ",\n Board: " + repr(self.cards_in_play)
+                   + ", Tokens: " + repr(self.progress_tokens_in_play))
 
     # removal of card from game board is done elsewhere! (in Game.select_card method).
     def construct_card(self, card, player_board, opponent_board):
@@ -612,7 +684,10 @@ class Player:
         '''Updates player passive variables based on players tableau'''
         return
 
-    # TODO Create construct_progress_token function to apply their effects and append them to progress_tokens_in_play
+    # construct the selected token by applying their respective effect
+    def construct_token(self, token, progress_board):
+        # TODO Apply token effect
+        self.progress_tokens_in_play.append(progress_board.tokens[token])
 
 class StateVariables:
     '''Class to represent all state variables shared between players (military, turn player, etc.)'''
@@ -628,6 +703,7 @@ class StateVariables:
         self.military_tokens = [0,0,0,0]
         self.turn_choice = False
         self.max_card_counts = [0,0,0,0,0,0,0]
+        self.progress_tokens_awarded = [False for i in range(6)]
 
     def change_turn_player(self):
         '''Function to change current turn player'''
