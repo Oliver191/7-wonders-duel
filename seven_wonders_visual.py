@@ -118,7 +118,7 @@ class ImageDisplay:
     #                 self.running = False
     #     pygame.quit()
 
-    def display_board(self, image_dict, selectable_dict, max_row, age, military_conflict, tokens, coins):
+    def display_board(self, image_dict, selectable_dict, max_row, age, military_conflict, m_tokens, coins, p_tokens, p_tokens_in_play):
         pygame.font.init()
 
         image_dict2 = image_dict.copy()
@@ -163,15 +163,22 @@ class ImageDisplay:
                         combined_image = pygame.image.load(f"images\{names[0]}.png").convert_alpha()
                         img = pygame.image.load(f"images\{names[1]}.png").convert_alpha()
                         img = pygame.transform.scale(img, (200, 90))
-                        if tokens[0] == 0: combined_image.blit(img, (170, 350))
-                        if tokens[3] == 0: combined_image.blit(img, (1265, 350))
+                        if m_tokens[0] == 0: combined_image.blit(img, (170, 350))
+                        if m_tokens[3] == 0: combined_image.blit(img, (1265, 350))
                         img = pygame.image.load(f"images\{names[2]}.png").convert_alpha()
                         img = pygame.transform.scale(img, (180, 80))
-                        if tokens[1] == 0: combined_image.blit(img, (420, 355))
-                        if tokens[2] == 0: combined_image.blit(img, (1044, 355))
+                        if m_tokens[1] == 0: combined_image.blit(img, (420, 355))
+                        if m_tokens[2] == 0: combined_image.blit(img, (1044, 355))
                         img = pygame.image.load(f"images\{names[3]}.png").convert_alpha()
                         img = pygame.transform.scale(img, (75, 200))
                         combined_image.blit(img, (780+(military_conflict*78), 185))
+
+                        for i in range(len(p_tokens)):
+                            if p_tokens[i].token_in_slot:
+                                name = p_tokens[i].token_name
+                                img = pygame.image.load(f"images\{name}.png").convert_alpha()
+                                img = pygame.transform.scale(img, (160, 160))
+                                combined_image.blit(img, (405 + 165 * i, 24))
 
                         img = pygame.font.Font(None, 60)
                         text_surface = img.render("City Player 1", True, (255, 255, 255))
@@ -181,17 +188,24 @@ class ImageDisplay:
                     elif index < 0:
                         multiple = self.get_multiple(7, len(image_dict[index]))
                         pygame.display.set_caption("Player " + str(abs(index)))
-                        self.screen = pygame.display.set_mode((max(2*self.width, self.width * min(len(image_dict[index]), 7)), 50 + self.height * (multiple+1)))
-                        combined_image = pygame.Surface((max(2*self.width, self.width * min(len(image_dict[index]), 7)), 50 + self.height * (multiple+1)))
+                        self.screen = pygame.display.set_mode((max(7*self.width, self.width * min(len(image_dict[index]), 7)), 150 + self.height * (multiple+1)))
+                        combined_image = pygame.Surface((max(7*self.width, self.width * min(len(image_dict[index]), 7)), 150 + self.height * (multiple+1)))
                         img = pygame.font.Font(None, 60)
-                        text_surface = img.render("Player " + str(abs(index)) + " -> Coins: " + str(coins[index]), True, (255, 255, 255))
-                        combined_image.blit(text_surface, (0, 0))
+                        text_surface = img.render("Player " + str(abs(index)) + " -> Coins: " + str(coins[index]) + ', Tokens: ', True, (255, 255, 255))
+                        combined_image.blit(text_surface, (0, 50))
+
+                        for i in range(len(p_tokens_in_play[index])):
+                            name = p_tokens_in_play[index][i].token_name
+                            img = pygame.image.load(f"images\{name}.png").convert_alpha()
+                            img = pygame.transform.scale(img, (140, 140))
+                            combined_image.blit(img, (600 + 145 * i, 0))
+
                         for i in range(len(image_dict[index])):
                             name = image_dict[index][i]
                             j = self.get_multiple(7, i + 1)
                             img = pygame.image.load(f"images\{name}.jpg").convert_alpha()
                             combined_image.blit(img, (
-                                (self.width * i) - (7 * j * self.width), 50 + j * self.height))
+                                (self.width * i) - (7 * j * self.width), 150 + j * self.height))
                     self.screen.blit(combined_image, (0, 0))
                     pygame.display.update()
         pygame.quit()

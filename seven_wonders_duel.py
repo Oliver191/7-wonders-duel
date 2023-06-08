@@ -64,15 +64,7 @@ class Game:
             return self.request_player_input()
 
         if action == 's': #Display a visual representation of the game
-            image_dict, selectable_dict, max_row = self.show_board()
-            image = ImageDisplay(220, 350)
-            # TODO Add display of available progress tokens on military board
-            # TODO Add display of owned progress tokens on player board
-            age = self.state_variables.current_age
-            military = self.state_variables.military_track
-            tokens = self.state_variables.military_tokens
-            coins = {-1 : self.players[0].coins, -2 : self.players[1].coins}
-            image.display_board(image_dict, selectable_dict, max_row, age, military, tokens, coins)
+            self.show_board()
             print("Please choose a card!")
             return self.request_player_input()
 
@@ -173,7 +165,7 @@ class Game:
         # If 2 matching scientific symbols are collected, allow progress token selection
         tokens_awarded = self.state_variables.progress_tokens_awarded
         match_science = [True if self.players[player].science[i] >= 2 and not tokens_awarded[i] else False for i in range(len(self.players[player].science))]
-        if any(match_science):
+        if any(match_science) and any([token.token_in_slot for token in self.progress_board.tokens]):
             self.state_variables.progress_tokens_awarded[match_science.index(True)] = True
             token = self.select_token()
             self.players[player].construct_token(token, self.progress_board)
@@ -310,14 +302,7 @@ class Game:
             return self.select_token()
         action, position = choice[0], choice[1:]
         if action == 's': #Display a visual representation of the game
-            image_dict, selectable_dict, max_row = self.show_board()
-            image = ImageDisplay(220, 350)
-            # TODO Copy adjusted function from above
-            age = self.state_variables.current_age
-            military = self.state_variables.military_track
-            tokens = self.state_variables.military_tokens
-            coins = {-1 : self.players[0].coins, -2 : self.players[1].coins}
-            image.display_board(image_dict, selectable_dict, max_row, age, military, tokens, coins)
+            self.show_board()
             print("Please choose a token!")
             return self.select_token()
         elif action == 'c':
@@ -382,7 +367,14 @@ class Game:
         selectable_dict[-1] = [1] * len(image_dict[-1])
         image_dict[-2] = [card.card_name.replace(" ", "").lower() for card in self.players[1].cards_in_play]
         selectable_dict[-2] = [1] * len(image_dict[-2])
-        return image_dict, selectable_dict, max_row
+        image = ImageDisplay(220, 350)
+        age = self.state_variables.current_age
+        military = self.state_variables.military_track
+        m_tokens = self.state_variables.military_tokens
+        coins = {-1: self.players[0].coins, -2: self.players[1].coins}
+        p_tokens = self.progress_board.tokens
+        p_tokens_in_play = {-1: self.players[0].progress_tokens_in_play, -2: self.players[1].progress_tokens_in_play}
+        image.display_board(image_dict, selectable_dict, max_row, age, military, m_tokens, coins, p_tokens, p_tokens_in_play)
 
     # Displays the game state in a nice enough way.
     def display_game_state(self):
