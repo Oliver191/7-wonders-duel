@@ -34,6 +34,11 @@ class Game:
             print("Enter [turn] to allow your opponent to begin.")
             print("Otherwise continue playing:")
 
+        if self.players[self.state_variables.turn_player].law:
+            print("")
+            print("Player " + str(self.state_variables.turn_player + 1) +
+                  " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
+
         choice = input("PLAYER " + str(self.state_variables.turn_player + 1) + ": "
                        + "Select a card to [c]onstruct or [d]iscard for coins. ")
                        #+ "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
@@ -43,8 +48,15 @@ class Game:
             return self.request_player_input()
         action, position = choice[0], choice[1:]
 
+        # If the player owns the law token, allow redeeming it in exchange for a scientific symbol
+        if self.players[self.state_variables.turn_player].law and action == 'r':
+            self.token_law(self.state_variables.turn_player, position)
+            # Check for scientific victory
+            if all([symbol >= 1 for symbol in self.players[self.state_variables.turn_player].science]):
+                return print('Player ' + str(self.state_variables.turn_player + 1) + ' has won the Game through Scientific Victory!')
+
         if choice == 'turn' and self.state_variables.turn_choice:
-            print("Opponent is chosen to begin.")
+            print("Your opponent is chosen to begin.")
             self.state_variables.turn_choice = False
             self.state_variables.change_turn_player()
             return self.request_player_input()
@@ -69,7 +81,8 @@ class Game:
             return self.request_player_input()
 
         if action != 'c' and action != 'd':
-            print("Select a valid action! (construct or discard)")
+            if not self.players[self.state_variables.turn_player].law or not action == 'r':
+                print("Select a valid action! (construct or discard)")
             return self.request_player_input()
 
         if not position.isdigit():
@@ -145,13 +158,14 @@ class Game:
         # Grant military tokens
         self.grant_military_token()
 
+        # If 2 matching scientific symbols are collected, allow progress token selection
+        self.check_progress_tokens(player)
+        self.check_progress_tokens(player) #check a second time if law token was redeemed
+
         # Check for scientific victory
-        if all([symbol >= 1 for symbol in self.players[0].science]):
+        if all([symbol >= 1 for symbol in self.players[player].science]):
             self.display_game_state()
-            return print('Player 1 has won the Game through Scientific Victory!')
-        elif all([symbol >= 1 for symbol in self.players[1].science]):
-            self.display_game_state()
-            return print('Player 2 has won the Game through Scientific Victory!')
+            return print('Player ' + str(player +1) + ' has won the Game through Scientific Victory!')
 
         # Award victory points based on purple cards
         if self.state_variables.current_age == 2: #only check in Age 3 to reduce computations
@@ -161,15 +175,6 @@ class Game:
             card_effects = [card.card_effect_passive for card in self.players[1].cards_in_play if card.card_type == 'Purple']
             if len(card_effects) > 0:
                 self.update_guild_points(card_effects, 1)
-
-        # If 2 matching scientific symbols are collected, allow progress token selection
-        tokens_awarded = self.state_variables.progress_tokens_awarded
-        match_science = [True if self.players[player].science[i] >= 2 and not tokens_awarded[i] else False for i in range(len(self.players[player].science))]
-        if any(match_science) and any([token.token_in_slot for token in self.progress_board.tokens]):
-            self.state_variables.progress_tokens_awarded[match_science.index(True)] = True
-            token = self.select_token()
-            self.players[player].construct_token(token, self.progress_board)
-            self.progress_board.tokens[token].token_in_slot = False
 
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
@@ -219,7 +224,11 @@ class Game:
         constructable = True
         cards = [card.card_name for card in player.cards_in_play]
         net_cost = ''
+        owned_tokens = [token.token_name for token in player.progress_tokens_in_play]
+        opponent_tokens = [token.token_name for token in opponent.progress_tokens_in_play]
         if card.card_prerequisite in cards: #free construction condition
+            if 'Urbanism' in owned_tokens:
+                player.coins += 4
             return constructable
         # check if player has insufficient resources to construct the card
         for i, j in zip(['C', 'W', 'S', 'P', 'G'], [player.clay, player.wood, player.stone, player.paper, player.glass]):
@@ -229,6 +238,8 @@ class Game:
                     constructable = False
                     net_cost += i*(resources_needed - j)
         net_cost = self.variable_production(net_cost, cards, opponent) #Handle variable production
+        if card.card_type == 'Blue' and 'Masonry' in owned_tokens:
+            net_cost = self.token_masonry(net_cost, cards, opponent)
         for i in list(net_cost): # calculates cost to trade for the resource
             trade_cost += self.calculate_rate(i, cards, opponent)
         if '$' in card.card_cost: #check if player has enough coins to construct the card
@@ -238,6 +249,8 @@ class Game:
         if player.coins >= trade_cost + coins_needed: #trade for necessary resources to construct the card
             constructable = True
             player.coins -= trade_cost
+            if 'Economy' in opponent_tokens:
+                self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable #False if cost or materials > players coins or materials
 
     # Chooses the resource with the highest trading cost and uses variable production for it, if available
@@ -290,6 +303,44 @@ class Game:
                 net_cost = net_cost.replace('S', '', 1)
         return net_cost
 
+    # If the token Masonry is in posession, blue cards will cost 2 fewer resources
+    def token_masonry(self, net_cost, cards, opponent):
+        if len(net_cost) <= 2:
+            net_cost = ''
+        else:
+            rates = np.zeros(len(net_cost), dtype=int)
+            for i in range(len(net_cost)):
+                rates[i] = self.calculate_rate(net_cost[i], cards, opponent)
+            net_cost = list(net_cost)
+            for i in np.sort(np.argsort(rates)[-2:])[::-1]:
+                del net_cost[i]
+            net_cost = ''.join(net_cost)
+        return net_cost
+
+    # If the token Law is in posession, allow redeeming it for a scientific symbol
+    def token_law(self, player, position):
+        if not position.isdigit():
+            return print("Symbol choice must be an integer!")
+        elif int(position) in range(len(self.players[player].science)):
+            self.players[player].science[int(position)] += 1
+            self.players[player].law = False
+            print("Token has been redeemed!")
+            self.check_progress_tokens(player)
+            self.display_game_state()
+        else:
+            return print('Select a valid scientific symbol!')
+
+    # If 2 matching scientific symbols are collected, allow progress token selection
+    def check_progress_tokens(self, player):
+        tokens_awarded = self.state_variables.progress_tokens_awarded
+        match_science = [True if self.players[player].science[i] >= 2 and not tokens_awarded[i] else False for i in
+                         range(len(self.players[player].science))]
+        if any(match_science) and any([token.token_in_slot for token in self.progress_board.tokens]):
+            self.state_variables.progress_tokens_awarded[match_science.index(True)] = True
+            token = self.select_token()
+            self.players[player].construct_token(token, self.progress_board)
+            self.progress_board.tokens[token].token_in_slot = False
+
     # Requests player input to select one of the tokens still available where token_in_slot == True
     def select_token(self):
         print("")
@@ -306,8 +357,8 @@ class Game:
             print("Please choose a token!")
             return self.select_token()
         elif action == 'c':
-            if position == '':
-                print('This is not a valid action!')
+            if not position.isdigit():
+                print("Token choice must be an integer!")
                 return self.select_token()
             elif int(position) in range(len(self.progress_board.tokens)):
                 if self.progress_board.tokens[int(position)].token_in_slot:
@@ -605,6 +656,7 @@ class Player:
         self.glass = 0
         self.victory_tokens = []
         self.science = [0,0,0,0,0,0]
+        self.law = False
 
     def __repr__(self):
         return str(" Coins: " + repr(self.coins)
@@ -628,6 +680,7 @@ class Player:
         cards = [card.card_name for card in player_board]
         if '$' in card.card_cost and card.card_prerequisite not in cards: #free construction condition
             self.coins -= counts[np.where(cost == '$')[0]][0] # decrease coins by card cost
+        owned_tokens = [token.token_name for token in self.progress_tokens_in_play]
 
         # increase player variables by resource card effect
         if card.card_type == 'Yellow': # handle Yellow cards
@@ -669,6 +722,8 @@ class Player:
             if effect[1] in resource: # increase resources of player by card effect
                 resource_name = resource_names[resource.index(effect[1])]
                 setattr(self, resource_name, getattr(self, resource_name) + int(effect[0]))
+            if 'Strategy' in owned_tokens and effect[1] == 'M':
+                self.military_points += 1
         self.cards_in_play.append(card)
         return
 
@@ -679,7 +734,47 @@ class Player:
     # construct the selected token by applying their respective effect
     def construct_token(self, token, progress_board):
         # TODO Apply token effect
+        effect = progress_board.tokens[token].token_effect_when_played
+        name = progress_board.tokens[token].token_name
+        owned_tokens = [token.token_name for token in self.progress_tokens_in_play]
         self.progress_tokens_in_play.append(progress_board.tokens[token])
+        if 'Mathematics' in owned_tokens:
+            self.victory_points += 3
+        if 'V' in effect: # Agriculture & Philosophy token
+            self.victory_points += int(effect[0])
+        if '$' in effect: # Agriculture & Urbanism token
+            self.coins += int(effect[-2])
+        elif 'S' in effect: # Law token
+            self.law = True
+            print("")
+            print("Player " + str(self.player_number + 1) + " >", self.__repr__())
+            self.token_law()
+        elif name == 'Mathematics':
+            self.victory_points += 3*len(owned_tokens) + 3
+
+    # If the token Law is in posession, allow redeeming it for a scientific symbol
+    def token_law(self):
+        print("Player " + str(self.player_number + 1) +
+              " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
+        choice = input("PLAYER " + str(self.player_number + 1) + ": ")
+        if choice == '':
+            print("Selected action was not valid. Resume game.")
+            return print("")
+        action, position = choice[0], choice[1:]
+        if action == 'r':
+            if not position.isdigit():
+                print("Symbol choice must be an integer!")
+                return self.token_law()
+            elif int(position) in range(len(self.science)):
+                self.science[int(position)] += 1
+                self.law = False
+                print("Token has been redeemed!")
+            else:
+                print('Select a valid scientific symbol!')
+                return self.token_law()
+        else:
+            print("Selected action was not valid. Resume game.")
+            return print("")
 
 class StateVariables:
     '''Class to represent all state variables shared between players (military, turn player, etc.)'''
