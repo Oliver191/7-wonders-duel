@@ -414,10 +414,15 @@ class Game:
             row = int(slots_in_age[j].row)
             image_dict[row].append(path)  # fill the dictionary with each path per row
             selectable_dict[row].append(selectable)
+        if age == 2: #Change middle row display of Age 3
+            image_dict[3].insert(1, 'black')
+            selectable_dict[3].insert(1, 0)
         image_dict[-1] = [card.card_name.replace(" ", "").lower() for card in self.players[0].cards_in_play]
-        selectable_dict[-1] = [1] * len(image_dict[-1])
+        # selectable_dict[-1] = [1] * len(image_dict[-1])
+        selectable_dict[-1] = [card.card_type for card in self.players[0].cards_in_play]
         image_dict[-2] = [card.card_name.replace(" ", "").lower() for card in self.players[1].cards_in_play]
-        selectable_dict[-2] = [1] * len(image_dict[-2])
+        # selectable_dict[-2] = [1] * len(image_dict[-2])
+        selectable_dict[-2] = [card.card_type for card in self.players[1].cards_in_play]
         image = ImageDisplay(220, 350)
         age = self.state_variables.current_age
         military = self.state_variables.military_track

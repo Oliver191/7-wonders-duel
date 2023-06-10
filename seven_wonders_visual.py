@@ -186,10 +186,13 @@ class ImageDisplay:
                         text_surface = img.render("City Player 2", True, (255, 255, 255))
                         combined_image.blit(text_surface, (1280, 100))
                     elif index < 0:
-                        multiple = self.get_multiple(7, len(image_dict[index]))
+                        # multiple = self.get_multiple(7, len(image_dict[index]))
+                        types = ['Brown', 'Grey', 'Blue', 'Red', 'Green', 'Yellow', 'Purple']
+                        type_count = [0,0,0,0,0,0,0]
+                        multiple = self.get_type_count(image_dict, selectable_dict, index)
                         pygame.display.set_caption("Player " + str(abs(index)))
-                        self.screen = pygame.display.set_mode((max(7*self.width, self.width * min(len(image_dict[index]), 7)), 150 + self.height * (multiple+1)))
-                        combined_image = pygame.Surface((max(7*self.width, self.width * min(len(image_dict[index]), 7)), 150 + self.height * (multiple+1)))
+                        self.screen = pygame.display.set_mode((7*self.width, 150 + self.height + max(0,multiple -1) * 85))
+                        combined_image = pygame.Surface((7*self.width, 150 + self.height + max(0,multiple-1) * 85))
                         img = pygame.font.Font(None, 60)
                         text_surface = img.render("Player " + str(abs(index)) + " -> Coins: " + str(coins[index]) + ', Tokens: ', True, (255, 255, 255))
                         combined_image.blit(text_surface, (0, 50))
@@ -200,15 +203,33 @@ class ImageDisplay:
                             img = pygame.transform.scale(img, (140, 140))
                             combined_image.blit(img, (600 + 145 * i, 0))
 
+                        for i in range(len(types)):
+                            img = pygame.image.load(f"images\{types[i]}.jpg").convert_alpha()
+                            combined_image.blit(img, (
+                                self.width * i, 150))
+
                         for i in range(len(image_dict[index])):
                             name = image_dict[index][i]
-                            j = self.get_multiple(7, i + 1)
+                            type_index = types.index(selectable_dict[index][i])
+                            # j = self.get_multiple(7, i + 1)
                             img = pygame.image.load(f"images\{name}.jpg").convert_alpha()
+                            # combined_image.blit(img, (
+                            #     (self.width * i) - (7 * j * self.width), 150 + j * self.height))
                             combined_image.blit(img, (
-                                (self.width * i) - (7 * j * self.width), 150 + j * self.height))
+                                self.width * type_index, 150 + type_count[type_index] * 85))
+                            type_count[type_index] += 1
                     self.screen.blit(combined_image, (0, 0))
                     pygame.display.update()
         pygame.quit()
+
+    def get_type_count(self, image_dict, selectable_dict, index):
+        types = ['Brown', 'Grey', 'Blue', 'Red', 'Green', 'Yellow', 'Purple']
+        type_count = [0, 0, 0, 0, 0, 0, 0]
+        for i in range(len(image_dict[index])):
+            type_index = types.index(selectable_dict[index][i])
+            type_count[type_index] += 1
+        multiple = max(type_count)
+        return multiple
 
     def board(self, max_width, max_height, image_dict2, selectable_dict, max_row, scale, age):
         pygame.display.set_caption("Age " + str(age+1) + " Board")
