@@ -14,13 +14,84 @@ class Game:
         self.players = [Player(0, 'human'), Player(1, 'human')]
         self.state_variables = StateVariables()
         self.progress_board = PorgressBoard()
+        self.draft_wonders()
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
 
     def __repr__(self):
         return repr('Game Instance: ' + str(self.game_count))
 
-        # TODO: Draft wonders function
+    #Draft wonders by selecting 8 random ones and letting players choose them in turn
+    def draft_wonders(self):
+        wonder_count = 8
+        wonder_list = np.genfromtxt('wonder_list.csv', delimiter=',', skip_header=1, dtype=str)
+        chosen_wonders = wonder_list[np.random.choice(wonder_list.shape[0], wonder_count, replace=False)]
+        wonders = []
+        for wonder in chosen_wonders:
+            wonders.append(Wonder(wonder[0], wonder[1], wonder[2], wonder[3]))
+        player = self.state_variables.turn_player
+        opponent = player ^ 1
+        selectable = [True for i in range(8)]
+        print("")
+        print("Before the game begins, each player selects 4 wonders.")
+        print("Player " + str(player+1) + " selects the first, Player " + str(opponent+1) + " chooses the next two, and then Player " + str(player+1) + " gets the remaining wonder.")
+        selectable = self.wonder_input(player, wonders[:4], selectable, 0)
+        selectable = self.wonder_input(opponent, wonders[:4], selectable, 0)
+        selectable = self.wonder_input(opponent, wonders[:4], selectable, 0)
+        self.players[player].wonders_in_hand.append(wonders[selectable[:4].index(True)])
+        selectable[selectable[:4].index(True)] = False
+        print("PLAYER " + str(player+1) + " receives the last remaining wonder.")
+
+        print("")
+        print("Now the next four wonders are selected in the same fashion, but Player " + str(opponent+1) + " begins.")
+        selectable = self.wonder_input(opponent, wonders[4:], selectable, 4)
+        selectable = self.wonder_input(player, wonders[4:], selectable, 4)
+        selectable = self.wonder_input(player, wonders[4:], selectable, 4)
+        self.players[opponent].wonders_in_hand.append(wonders[selectable[4:].index(True)+4])
+        selectable[selectable[4:].index(True)+4] = False
+        print("PLAYER " + str(opponent + 1) + " receives the last remaining wonder.")
+
+        print("Player 1 Wonders: ", self.players[0].wonders_in_hand)
+        print("Player 2 Wonders: ", self.players[1].wonders_in_hand)
+        print("")
+
+    #Select a single wonder during wonder drafting
+    def wonder_input(self, player, remaining_wonders, selectable, shift):
+        count = 0
+        selectable_wonders = '['
+        for i in range(len(remaining_wonders)):
+            if selectable[i+shift]:
+                selectable_wonders += '#' + str(remaining_wonders.index(remaining_wonders[i])) + ' ' + str(remaining_wonders[i])
+                count += 1
+            selectable_wonders += ', '
+        selectable_wonders = selectable_wonders[:-2]
+        selectable_wonders += ']'
+
+        print("Wonders available: ", selectable_wonders)
+        choice = input("PLAYER " + str(player + 1) + ": "
+                       + "Select a remaining [w]onder of the " + str(count) + " available. ")
+
+        if choice == '':
+            print("Select a valid action!")
+            return self.wonder_input(player, remaining_wonders, selectable, shift)
+        action, position = choice[0], choice[1:]
+
+        # TODO Add visual representation of Wonder selection
+        if action == 'w':
+            if not position.isdigit():
+                print("Wonder choice must be an integer!")
+                return self.wonder_input(player, remaining_wonders, selectable, shift)
+            elif int(position) in range(len(remaining_wonders)) and selectable[int(position)+shift]:
+                self.players[player].wonders_in_hand.append(remaining_wonders[int(position)])
+                selectable[int(position)+shift] = False
+                return selectable
+            else:
+                print('Select a valid wonder!')
+                return self.wonder_input(player, remaining_wonders, selectable, shift)
+        else:
+            print("Select a valid action!")
+            return self.wonder_input(player, remaining_wonders, selectable, shift)
+
 
     def request_player_input(self):  # TODO When using AI, no need for player input, just needs to print AI choice.
         """Function to begin requesting player input
@@ -40,13 +111,13 @@ class Game:
                   " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
 
         choice = input("PLAYER " + str(self.state_variables.turn_player + 1) + ": "
-                       + "Select a card to [c]onstruct or [d]iscard for coins. ")
+                       + "Select a card to [c]onstruct, [d]iscard for coins, or use for [w]onder. ")
                        #+ "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
 
         if choice == '':
-            print("Select a valid action! (construct or discard)")
+            print("Select a valid action! (construct, discard or wonder)")
             return self.request_player_input()
-        action, position = choice[0], choice[1:]
+        action, position, position_wonder = choice[0], choice[1:], "0"
 
         # If the player owns the law token, allow redeeming it in exchange for a scientific symbol
         if self.players[self.state_variables.turn_player].law and action == 'r':
@@ -80,19 +151,31 @@ class Game:
             print("Please choose a card!")
             return self.request_player_input()
 
-        if action != 'c' and action != 'd':
+        if action == 'w':
+            if len(position.split(" ")) == 2:
+                if position.split(" ")[0].isdigit() and position.split(" ")[1].isdigit():
+                    position_wonder = position.split(" ")[1]
+                    position = position.split(" ")[0]
+                else:
+                    print("Card and wonder choice must be an integer!")
+                    return self.request_player_input()
+            else:
+                print("Choose a card and a wonder separated by a space.")
+                return self.request_player_input()
+
+        if action != 'c' and action != 'd' and action != 'w':
             if not self.players[self.state_variables.turn_player].law or not action == 'r':
-                print("Select a valid action! (construct or discard)")
+                print("Select a valid action! (construct, discard or wonder)")
             return self.request_player_input()
 
         if not position.isdigit():
             print("Card choice must be an integer!")
             return self.request_player_input()
 
-        self.select_card(int(position), action)
+        self.select_card(int(position), action, int(position_wonder))
 
     # Main gameplay loop - players alternate choosing cards from the board and performing actions with them.
-    def select_card(self, position, action='c'):
+    def select_card(self, position, action='c', position_wonder=0):
         '''Function to select card on board and perform the appropriate action'''
         # Turn player variables
         player = self.state_variables.turn_player
@@ -135,6 +218,16 @@ class Game:
             # Gain coins based on yellow building owned.
             yellow_card_count = len([card for card in player_board if card.card_type == 'Yellow'])
             player_state.coins += 2 + yellow_card_count
+        elif action == 'w':
+            if position_wonder in range(len(player_state.wonders_in_hand)):
+                if self.wonder_constructable(player_state, opponent_state, position_wonder):
+                    player_state.construct_wonder(position_wonder)
+                else:
+                    print('You do not have the resources required to construct this wonder!')
+                    return self.request_player_input()
+            else:
+                print('Select a wonder in your hand!')
+                return self.request_player_input()
         else:
             print('This is not a valid action!')
             return self.request_player_input()
@@ -252,6 +345,13 @@ class Game:
             if 'Economy' in opponent_tokens:
                 self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable #False if cost or materials > players coins or materials
+
+    # TODO Create a wonder_constructable function to check if the player can construct the wonder
+    # Checks whether the wonder is constructable given state and cost.
+    def wonder_constructable(self, player, opponent, position_wonder):
+        constructable = True
+        print("Checking construction.")
+        return constructable
 
     # Chooses the resource with the highest trading cost and uses variable production for it, if available
     def variable_production(self, net_cost, cards, opponent):
@@ -432,6 +532,9 @@ class Game:
         p_tokens_in_play = {-1: self.players[0].progress_tokens_in_play, -2: self.players[1].progress_tokens_in_play}
         image.display_board(image_dict, selectable_dict, max_row, age, military, m_tokens, coins, p_tokens, p_tokens_in_play)
 
+        # TODO Add visual representation of wonders_in_hand to player board
+        # TODO Add visual representation of wonders_in_play to player board
+
     # Displays the game state in a nice enough way.
     def display_game_state(self):
         '''Print a visual representation of the current game state'''
@@ -536,6 +639,20 @@ class Game:
                 self.state_variables.max_card_counts[colors.index(color)+3] = type_count
                 type_count -= card_counts[colors.index(color)+3]
             self.players[player].victory_points += type_count
+
+class Wonder:
+    '''Define a single wonder.'''
+
+    def __init__(self, wonder_name, wonder_cost, wonder_effect_passive, wonder_effect_when_played):
+        self.wonder_name = wonder_name
+        self.wonder_cost = wonder_cost
+        self.wonder_effect_passive = wonder_effect_passive
+        self.wonder_effect_when_played = wonder_effect_when_played
+
+    def __repr__(self):
+        return str(bg(249, 242, 73) + fg.black
+                   + self.wonder_name
+                   + rs.all)
 
 class Card:
     '''Define a single card. Attributes match the .csv headers'''
@@ -675,7 +792,10 @@ class Player:
                    + ", Science: " + repr(self.science[0]) + ' ' + repr(self.science[1]) + ' ' + repr(self.science[2])
                    + ' ' + repr(self.science[3]) + ' ' + repr(self.science[4]) + ' ' + repr(self.science[5])
                    + ",\n Board: " + repr(self.cards_in_play)
-                   + ", Tokens: " + repr(self.progress_tokens_in_play))
+                   + ", Tokens: " + repr(self.progress_tokens_in_play)
+                   + ",\n Wonders Hand: " + repr(self.wonders_in_hand)
+                   + ", Wonders Play: " + repr(self.wonders_in_play)
+                   )
 
     # removal of card from game board is done elsewhere! (in Game.select_card method).
     def construct_card(self, card, player_board, opponent_board):
@@ -732,13 +852,22 @@ class Player:
         self.cards_in_play.append(card)
         return
 
+    # TODO create construct_wonder function to apply effects and move card from in_hand to in_play
+    # construct the selected wonder by applying their respective effect
+    def construct_wonder(self, position_wonder):
+        print("Constructing Wonder")
+        wonder = self.wonders_in_hand[position_wonder]
+
+        self.wonders_in_hand.remove(wonder)
+        self.wonders_in_play.append(wonder)
+        return
+
     def update(self):
         '''Updates player passive variables based on players tableau'''
         return
 
     # construct the selected token by applying their respective effect
     def construct_token(self, token, progress_board):
-        # TODO Apply token effect
         effect = progress_board.tokens[token].token_effect_when_played
         name = progress_board.tokens[token].token_name
         owned_tokens = [token.token_name for token in self.progress_tokens_in_play]
