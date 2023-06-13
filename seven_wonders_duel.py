@@ -28,7 +28,7 @@ class Game:
         chosen_wonders = wonder_list[np.random.choice(wonder_list.shape[0], wonder_count, replace=False)]
         wonders = []
         for wonder in chosen_wonders:
-            wonders.append(Wonder(wonder[0], wonder[1], wonder[2], wonder[3]))
+            wonders.append(Wonder(wonder[0], wonder[1], wonder[2], wonder[3], False))
         player = self.state_variables.turn_player
         opponent = player ^ 1
         selectable = [True for i in range(8)]
@@ -61,7 +61,7 @@ class Game:
         selectable_wonders = '['
         for i in range(len(remaining_wonders)):
             if selectable[i+shift]:
-                selectable_wonders += '#' + str(remaining_wonders.index(remaining_wonders[i])) + ' ' + str(remaining_wonders[i])
+                selectable_wonders += '#' + str(i) + ' ' + str(remaining_wonders[i])
                 count += 1
             selectable_wonders += ', '
         selectable_wonders = selectable_wonders[:-2]
@@ -224,10 +224,21 @@ class Game:
             player_state.coins += 2 + yellow_card_count
         elif action == 'w':
             if position_wonder in range(len(player_state.wonders_in_hand)):
-                if self.wonder_constructable(player_state, opponent_state, position_wonder):
-                    player_state.construct_wonder(position_wonder)
+                if not [wonder.wonder_in_play for wonder in player_state.wonders_in_hand][position_wonder]:
+                    if self.wonder_constructable(player_state, opponent_state, position_wonder):
+                        player_state.construct_wonder(position_wonder, opponent_state, player)
+                        if len(self.players[0].wonders_in_play + self.players[1].wonders_in_play) == 7:
+                            for i in range(len(self.players[0].wonders_in_hand)):
+                                player_state.wonders_in_hand[i].wonder_in_play = True
+                                opponent_state.wonders_in_hand[i].wonder_in_play = True
+                            print("")
+                            print("Only 7 wonders can be constructed. The 8th wonder is discarded.")
+                            print("")
+                    else:
+                        print('You do not have the resources required to construct this wonder!')
+                        return self.request_player_input()
                 else:
-                    print('You do not have the resources required to construct this wonder!')
+                    print('Wonder was already constructed!')
                     return self.request_player_input()
             else:
                 print('Select a wonder in your hand!')
@@ -276,9 +287,16 @@ class Game:
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
             self.state_variables.progress_age()
+            self.players[player].replay = False
         else:  # Otherwise, update all cards in current age and change turn turn_player
             self.age_boards[age].update_all()
-            self.state_variables.change_turn_player()  # TODO This might not always be true if go again wonders chosen
+            if not self.players[player].replay:
+                self.state_variables.change_turn_player()
+            else:
+                self.players[player].replay = False
+                print("")
+                print("Player " + str(player +1) + " has the Replay effect active and is allowed to play again.")
+                print("")
 
         if self.state_variables.game_end:
             # Civilian victory: 1 victory point for every 3 coins
@@ -316,10 +334,9 @@ class Game:
     def card_constructable(self, player, opponent, card):
         '''Checks whether a card is constructable given current player states'''
         cost, counts = np.unique(list(card.card_cost), return_counts=True) #split string and return unique values and their counts
-        trade_cost = 0
-        coins_needed = 0
-        constructable = True
+        trade_cost, coins_needed, constructable = 0, 0, True
         cards = [card.card_name for card in player.cards_in_play]
+        wonders = [wonder.wonder_name for wonder in player.wonders_in_play]
         net_cost = ''
         owned_tokens = [token.token_name for token in player.progress_tokens_in_play]
         opponent_tokens = [token.token_name for token in opponent.progress_tokens_in_play]
@@ -334,7 +351,7 @@ class Game:
                 if resources_needed > j:
                     constructable = False
                     net_cost += i*(resources_needed - j)
-        net_cost = self.variable_production(net_cost, cards, opponent) #Handle variable production
+        net_cost = self.variable_production(net_cost, cards, opponent, wonders) #Handle variable production
         if card.card_type == 'Blue' and 'Masonry' in owned_tokens:
             net_cost = self.token_masonry(net_cost, cards, opponent)
         for i in list(net_cost): # calculates cost to trade for the resource
@@ -350,62 +367,96 @@ class Game:
                 self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable #False if cost or materials > players coins or materials
 
-    # TODO Create a wonder_constructable function to check if the player can construct the wonder
     # Checks whether the wonder is constructable given state and cost.
     def wonder_constructable(self, player, opponent, position_wonder):
-        constructable = True
-        print("Checking construction.")
+        wonder = player.wonders_in_hand[position_wonder]
+        cost, counts = np.unique(list(wonder.wonder_cost), return_counts=True)
+        trade_cost, constructable = 0, True
+        cards = [card.card_name for card in player.cards_in_play]
+        wonders = [wonder.wonder_name for wonder in player.wonders_in_play]
+        net_cost = ''
+        owned_tokens = [token.token_name for token in player.progress_tokens_in_play]
+        opponent_tokens = [token.token_name for token in opponent.progress_tokens_in_play]
+
+        # check if player has insufficient resources to construct the wonder
+        for i, j in zip(['C', 'W', 'S', 'P', 'G'],[player.clay, player.wood, player.stone, player.paper, player.glass]):
+            if i in wonder.wonder_cost:
+                resources_needed = counts[np.where(cost == i)[0]][0]
+                if resources_needed > j:
+                    constructable = False
+                    net_cost += i * (resources_needed - j)
+        net_cost = self.variable_production(net_cost, cards, opponent, wonders)  # Handle variable production
+        for i in list(net_cost): # calculates cost to trade for the resource
+            trade_cost += self.calculate_rate(i, cards, opponent)
+        if player.coins >= trade_cost: #trade for necessary resources to construct the card
+            constructable = True
+            player.coins -= trade_cost
+            if 'Economy' in opponent_tokens:
+                self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable
 
     # Chooses the resource with the highest trading cost and uses variable production for it, if available
-    def variable_production(self, net_cost, cards, opponent):
+    def variable_production(self, net_cost, cards, opponent, wonders):
         if 'Forum' in cards:
-            if 'P' in net_cost and 'G' in net_cost:
-                p_rate = self.calculate_rate('P', cards, opponent)
-                g_rate = self.calculate_rate('G', cards, opponent)
-                if p_rate > g_rate:
-                    net_cost = net_cost.replace('P', '', 1)
-                else:
-                    net_cost = net_cost.replace('G', '', 1)
-            elif 'P' in net_cost:
-                net_cost = net_cost.replace('P', '', 1)
-            elif 'G' in net_cost:
-                net_cost = net_cost.replace('G', '', 1)
+            net_cost = self.variable_production_PG(net_cost, cards, opponent)
         if 'Caravansery' in cards:
-            w_rate = self.calculate_rate('W', cards, opponent)
-            c_rate = self.calculate_rate('C', cards, opponent)
-            s_rate = self.calculate_rate('S', cards, opponent)
-            if 'W' in net_cost:
-                if 'C' in net_cost and 'S' in net_cost:
-                    if w_rate >= c_rate and w_rate >= s_rate:
-                        net_cost = net_cost.replace('W', '', 1)
-                    elif c_rate >= s_rate:
-                        net_cost = net_cost.replace('C', '', 1)
-                    else:
-                        net_cost = net_cost.replace('S', '', 1)
-                elif 'C' in net_cost:
-                    if w_rate >= c_rate:
-                        net_cost = net_cost.replace('W', '', 1)
-                    else:
-                        net_cost = net_cost.replace('C', '', 1)
-                elif 'S' in net_cost:
-                    if w_rate >= s_rate:
-                        net_cost = net_cost.replace('W', '', 1)
-                    else:
-                        net_cost = net_cost.replace('S', '', 1)
-                else:
+            net_cost = self.variable_production_WCS(net_cost, cards, opponent)
+        if 'Piraeus' in wonders:
+            net_cost = self.variable_production_PG(net_cost, cards, opponent)
+        if 'The Great Lighthouse' in wonders:
+            net_cost = self.variable_production_WCS(net_cost, cards, opponent)
+        return net_cost
+
+    def variable_production_PG(self, net_cost, cards, opponent):
+        if 'P' in net_cost and 'G' in net_cost:
+            p_rate = self.calculate_rate('P', cards, opponent)
+            g_rate = self.calculate_rate('G', cards, opponent)
+            if p_rate > g_rate:
+                net_cost = net_cost.replace('P', '', 1)
+            else:
+                net_cost = net_cost.replace('G', '', 1)
+        elif 'P' in net_cost:
+            net_cost = net_cost.replace('P', '', 1)
+        elif 'G' in net_cost:
+            net_cost = net_cost.replace('G', '', 1)
+        return net_cost
+
+    def variable_production_WCS(self, net_cost, cards, opponent):
+        w_rate = self.calculate_rate('W', cards, opponent)
+        c_rate = self.calculate_rate('C', cards, opponent)
+        s_rate = self.calculate_rate('S', cards, opponent)
+        if 'W' in net_cost:
+            if 'C' in net_cost and 'S' in net_cost:
+                if w_rate >= c_rate and w_rate >= s_rate:
                     net_cost = net_cost.replace('W', '', 1)
+                elif c_rate >= s_rate:
+                    net_cost = net_cost.replace('C', '', 1)
+                else:
+                    net_cost = net_cost.replace('S', '', 1)
             elif 'C' in net_cost:
-                if 'S' in net_cost:
-                    if c_rate >= s_rate:
-                        net_cost = net_cost.replace('C', '', 1)
-                    else:
-                        net_cost = net_cost.replace('S', '', 1)
+                if w_rate >= c_rate:
+                    net_cost = net_cost.replace('W', '', 1)
                 else:
                     net_cost = net_cost.replace('C', '', 1)
             elif 'S' in net_cost:
-                net_cost = net_cost.replace('S', '', 1)
+                if w_rate >= s_rate:
+                    net_cost = net_cost.replace('W', '', 1)
+                else:
+                    net_cost = net_cost.replace('S', '', 1)
+            else:
+                net_cost = net_cost.replace('W', '', 1)
+        elif 'C' in net_cost:
+            if 'S' in net_cost:
+                if c_rate >= s_rate:
+                    net_cost = net_cost.replace('C', '', 1)
+                else:
+                    net_cost = net_cost.replace('S', '', 1)
+            else:
+                net_cost = net_cost.replace('C', '', 1)
+        elif 'S' in net_cost:
+            net_cost = net_cost.replace('S', '', 1)
         return net_cost
+
 
     # If the token Masonry is in posession, blue cards will cost 2 fewer resources
     def token_masonry(self, net_cost, cards, opponent):
@@ -643,11 +694,12 @@ class Game:
 class Wonder:
     '''Define a single wonder.'''
 
-    def __init__(self, wonder_name, wonder_cost, wonder_effect_passive, wonder_effect_when_played):
+    def __init__(self, wonder_name, wonder_cost, wonder_effect_passive, wonder_effect_when_played, wonder_in_play):
         self.wonder_name = wonder_name
         self.wonder_cost = wonder_cost
         self.wonder_effect_passive = wonder_effect_passive
         self.wonder_effect_when_played = wonder_effect_when_played
+        self.wonder_in_play = wonder_in_play
 
     def __repr__(self):
         return str(bg(249, 242, 73) + fg.black
@@ -779,8 +831,22 @@ class Player:
         self.victory_tokens = []
         self.science = [0,0,0,0,0,0]
         self.law = False
+        self.replay = False
 
     def __repr__(self):
+        in_hand, in_play = '[', '['
+        for i in range(len(self.wonders_in_hand)):
+            if not self.wonders_in_hand[i].wonder_in_play:
+                in_hand += '#' + str(i) + ' ' + str(self.wonders_in_hand[i])
+            elif self.wonders_in_hand[i] in self.wonders_in_play:
+                in_play += '#' + str(i) + ' ' + str(self.wonders_in_hand[i])
+            in_hand += ', '
+            in_play += ', '
+        in_hand = in_hand[:-2]
+        in_play = in_play[:-2]
+        in_hand += ']'
+        in_play += ']'
+
         return str(" Coins: " + repr(self.coins)
                    + ", Victory: " + repr(self.victory_points)
                    + ", Military: " + repr(self.military_points)
@@ -793,8 +859,8 @@ class Player:
                    + ' ' + repr(self.science[3]) + ' ' + repr(self.science[4]) + ' ' + repr(self.science[5])
                    + ",\n Board: " + repr(self.cards_in_play)
                    + ", Tokens: " + repr(self.progress_tokens_in_play)
-                   + ",\n Wonders Hand: " + repr(self.wonders_in_hand)
-                   + ", Wonders Play: " + repr(self.wonders_in_play)
+                   + ",\n Wonders Hand: " + in_hand
+                   + ", Wonders Play: " + in_play
                    )
 
     # removal of card from game board is done elsewhere! (in Game.select_card method).
@@ -853,14 +919,91 @@ class Player:
         return
 
     # TODO create construct_wonder function to apply effects and move card from in_hand to in_play
-    # construct the selected wonder by applying their respective effect
-    def construct_wonder(self, position_wonder):
-        print("Constructing Wonder")
+    # Construct the selected wonder by applying their respective effect
+    def construct_wonder(self, position_wonder, opponent, player_turn):
         wonder = self.wonders_in_hand[position_wonder]
+        effect = wonder.wonder_effect_when_played
+        effect_passive = wonder.wonder_effect_passive
 
-        self.wonders_in_hand.remove(wonder)
+        if 'V' in effect:
+            self.victory_points += int(effect[0])
+        if '$' in effect:
+            if 'V' in effect:
+                self.coins += int(effect[2])
+            else:
+                self.coins += int(effect[:2])
+        if 'M' in effect:
+            self.military_points += int(effect[2])
+        if '-' in effect:
+            opponent.coins -= int(effect[-2])
+
+        if 'Replay' in effect_passive:
+            self.replay = True
+        elif 'Grey' in effect_passive:
+            self.destory_card(opponent, 'Grey', player_turn)
+        elif 'Brown' in effect_passive:
+            self.destory_card(opponent, 'Brown', player_turn)
+
+        wonder.wonder_in_play = True
+        self.wonders_in_hand[position_wonder].wonder_in_play = True
         self.wonders_in_play.append(wonder)
         return
+
+    # Enables the player to discard one card from his opponent in the specified color
+    def destory_card(self, opponent, color, player_turn):
+        opponent_cards = [card for card in opponent.cards_in_play if card.card_type == color]
+        opponent_turn = player_turn ^ 1
+
+        if len(opponent_cards) >= 2:
+            cards = '['
+            for i in range(len(opponent_cards)):
+                cards += '#' + str(i) + ' ' + str(opponent_cards[i])
+                cards += ', '
+            cards = cards[:-2]
+            cards += ']'
+
+            print("")
+            print(color + " cards of Player " + str(opponent_turn +1) + ": " + cards)
+            choice = input("PLAYER " + str(player_turn + 1) + ": "
+                           + "Select a " + color + " card of Player " + str(opponent_turn +1) + " to discard.")
+
+            if choice == '':
+                print("Select a valid action!")
+                return self.destory_card(opponent, color, player_turn)
+            action, position = choice[0], choice[1:]
+
+            if action == 's':
+                image = ImageDisplay(220, 350)
+                image.display_color_card(opponent_cards)
+                return self.destory_card(opponent, color, player_turn)
+            elif action == 'd':
+                if not position.isdigit():
+                    print("Card choice must be an integer!")
+                    return self.destory_card(opponent, color, player_turn)
+                elif int(position) in range(len(opponent_cards)):
+                    card = opponent_cards[int(position)]
+                    opponent.cards_in_play.remove(card)
+                    resource = ['C', 'W', 'S', 'P', 'G']
+                    resource_names = ['clay', 'wood', 'stone', 'paper', 'glass']
+                    if card.card_effect_passive[1] in resource:
+                        resource_name = resource_names[resource.index(card.card_effect_passive[1])]
+                        setattr(opponent, resource_name, getattr(opponent, resource_name) - int(card.card_effect_passive[0]))
+                else:
+                    print('Select a valid ' + color + " card!")
+                    return self.destory_card(opponent, color, player_turn)
+            else:
+                print("Select a valid action!")
+                return self.destory_card(opponent, color, player_turn)
+        elif len(opponent_cards) == 1:
+            card = opponent_cards[0]
+            print("")
+            print(str(card) + " of Player " + str(opponent_turn + 1) + " is discarded.")
+            opponent.cards_in_play.remove(card)
+            resource = ['C', 'W', 'S', 'P', 'G']
+            resource_names = ['clay', 'wood', 'stone', 'paper', 'glass']
+            if card.card_effect_passive[1] in resource:
+                resource_name = resource_names[resource.index(card.card_effect_passive[1])]
+                setattr(opponent, resource_name, getattr(opponent, resource_name) - int(card.card_effect_passive[0]))
 
     def update(self):
         '''Updates player passive variables based on players tableau'''

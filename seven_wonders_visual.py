@@ -219,18 +219,18 @@ class ImageDisplay:
                                 self.width * type_index, 150 + type_count[type_index] * 85))
                             type_count[type_index] += 1
 
-                        merged_wonders = wonders[index][0] + wonders[index][1]
-                        for i in range(len(merged_wonders)):
-                            if merged_wonders[i] in wonders[index][1]:
+                        for i in range(len(wonders[index][0])):
+                            if wonders[index][0][i] in wonders[index][1]:
                                 name = 'age1back'
                                 img = pygame.image.load(f"images\{name}.jpg").convert_alpha()
                                 img = pygame.transform.rotate(img, 90)
                                 img = pygame.transform.scale(img, (self.height*0.75, self.width*0.75))
                                 combined_image.blit(img, (7 * self.width  + 125, self.width * i + 29))
-                            name = merged_wonders[i].wonder_name
-                            img = pygame.image.load(f"images\{name}.png").convert_alpha()
-                            img = pygame.transform.scale(img, (self.height, self.width))
-                            combined_image.blit(img, (7*self.width, self.width*i))
+                            if wonders[index][0][i] in wonders[index][1] or not wonders[index][0][i].wonder_in_play:
+                                name = wonders[index][0][i].wonder_name
+                                img = pygame.image.load(f"images\{name}.png").convert_alpha()
+                                img = pygame.transform.scale(img, (self.height, self.width))
+                                combined_image.blit(img, (7*self.width, self.width*i))
 
                     self.screen.blit(combined_image, (0, 0))
                     pygame.display.update()
@@ -263,8 +263,8 @@ class ImageDisplay:
         return combined_image
 
     def display_wonder(self, remaining_wonders, selectable, shift, p1_wonders, p2_wonders):
-        pygame.display.set_caption("7wonders")
-        win = gw.getWindowsWithTitle("7wonders")[0]
+        pygame.display.set_caption("Draft Wonders")
+        win = gw.getWindowsWithTitle("Draft Wonders")[0]
         win.minimize()
         win.restore()
         win.move(-620, -450)
@@ -284,6 +284,30 @@ class ImageDisplay:
                 img = pygame.image.load(f"images\{name}.png").convert_alpha()
                 img = pygame.transform.scale(img, (self.height, self.width))
                 combined_image.blit(img, (self.height * i, j * self.width))
+
+        self.screen.blit(combined_image, (0, 0))
+        pygame.display.update()
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT or event.type == pygame.KEYDOWN:
+                    self.running = False
+        pygame.quit()
+
+    def display_color_card(self, opponent_cards):
+        pygame.display.set_caption("Discard Card")
+        win = gw.getWindowsWithTitle("Discard Card")[0]
+        win.minimize()
+        win.restore()
+        win.move(-620, -450)
+        multiple = self.get_multiple(7, len(opponent_cards))
+        self.screen = pygame.display.set_mode((min(7, len(opponent_cards)) * self.width, (1+multiple) * self.height))
+        combined_image = pygame.Surface((min(7, len(opponent_cards)) * self.width, (1+multiple) * self.height))
+
+        for i in range(len(opponent_cards)):
+            j = self.get_multiple(7, i + 1)
+            name = opponent_cards[i].card_name.replace(" ", "").lower()
+            img = pygame.image.load(f"images\{name}.jpg").convert_alpha()
+            combined_image.blit(img, (self.width * (i - 7*j), j * self.height))
 
         self.screen.blit(combined_image, (0, 0))
         pygame.display.update()
