@@ -118,7 +118,7 @@ class ImageDisplay:
     #                 self.running = False
     #     pygame.quit()
 
-    def display_board(self, image_dict, selectable_dict, max_row, age, military_conflict, m_tokens, coins, p_tokens, p_tokens_in_play):
+    def display_board(self, image_dict, selectable_dict, max_row, age, military_conflict, m_tokens, coins, p_tokens, p_tokens_in_play, wonders):
         pygame.font.init()
 
         image_dict2 = image_dict.copy()
@@ -191,8 +191,8 @@ class ImageDisplay:
                         type_count = [0,0,0,0,0,0,0]
                         multiple = self.get_type_count(image_dict, selectable_dict, index)
                         pygame.display.set_caption("Player " + str(abs(index)))
-                        self.screen = pygame.display.set_mode((7*self.width, 150 + self.height + max(0,multiple -1) * 85))
-                        combined_image = pygame.Surface((7*self.width, 150 + self.height + max(0,multiple-1) * 85))
+                        self.screen = pygame.display.set_mode((7*self.width + self.height + 50, max(4*self.width, 150 + self.height + max(0,multiple -1) * 85)))
+                        combined_image = pygame.Surface((7*self.width + self.height + 50, max(4*self.width, 150 + self.height + max(0,multiple-1) * 85)))
                         img = pygame.font.Font(None, 60)
                         text_surface = img.render("Player " + str(abs(index)) + " -> Coins: " + str(coins[index]) + ', Tokens: ', True, (255, 255, 255))
                         combined_image.blit(text_surface, (0, 50))
@@ -218,6 +218,20 @@ class ImageDisplay:
                             combined_image.blit(img, (
                                 self.width * type_index, 150 + type_count[type_index] * 85))
                             type_count[type_index] += 1
+
+                        merged_wonders = wonders[index][0] + wonders[index][1]
+                        for i in range(len(merged_wonders)):
+                            if merged_wonders[i] in wonders[index][1]:
+                                name = 'age1back'
+                                img = pygame.image.load(f"images\{name}.jpg").convert_alpha()
+                                img = pygame.transform.rotate(img, 90)
+                                img = pygame.transform.scale(img, (self.height*0.75, self.width*0.75))
+                                combined_image.blit(img, (7 * self.width  + 125, self.width * i + 29))
+                            name = merged_wonders[i].wonder_name
+                            img = pygame.image.load(f"images\{name}.png").convert_alpha()
+                            img = pygame.transform.scale(img, (self.height, self.width))
+                            combined_image.blit(img, (7*self.width, self.width*i))
+
                     self.screen.blit(combined_image, (0, 0))
                     pygame.display.update()
         pygame.quit()
@@ -247,3 +261,34 @@ class ImageDisplay:
                     combined_image.blit(img, ((self.width * i)+offset, (self.height/2) * (len(image_dict2) - row - 1)))
         combined_image = pygame.transform.scale(combined_image, (max_width*scale, max_height*scale))
         return combined_image
+
+    def display_wonder(self, remaining_wonders, selectable, shift, p1_wonders, p2_wonders):
+        pygame.display.set_caption("7wonders")
+        win = gw.getWindowsWithTitle("7wonders")[0]
+        win.minimize()
+        win.restore()
+        win.move(-620, -450)
+        self.screen = pygame.display.set_mode((4 * self.height, 4 * self.width))
+        combined_image = pygame.Surface((4 * self.height, 4 * self.width))
+
+        for i in range(len(remaining_wonders)):
+            if selectable[i+shift]:
+                name = remaining_wonders[i].wonder_name
+                img = pygame.image.load(f"images\{name}.png").convert_alpha()
+                img = pygame.transform.scale(img, (self.height, self.width))
+                combined_image.blit(img, (self.height*i, 0))
+
+        for wonders, j in zip([p1_wonders, p2_wonders], [2,3]):
+            for i in range(len(wonders)):
+                name = wonders[i].wonder_name
+                img = pygame.image.load(f"images\{name}.png").convert_alpha()
+                img = pygame.transform.scale(img, (self.height, self.width))
+                combined_image.blit(img, (self.height * i, j * self.width))
+
+        self.screen.blit(combined_image, (0, 0))
+        pygame.display.update()
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT or event.type == pygame.KEYDOWN:
+                    self.running = False
+        pygame.quit()

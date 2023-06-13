@@ -76,8 +76,12 @@ class Game:
             return self.wonder_input(player, remaining_wonders, selectable, shift)
         action, position = choice[0], choice[1:]
 
-        # TODO Add visual representation of Wonder selection
-        if action == 'w':
+        if action == 's':
+            image = ImageDisplay(220, 350)
+            p1_wonders, p2_wonders = self.players[0].wonders_in_hand, self.players[1].wonders_in_hand
+            image.display_wonder(remaining_wonders, selectable, shift, p1_wonders, p2_wonders)
+            return self.wonder_input(player, remaining_wonders, selectable, shift)
+        elif action == 'w':
             if not position.isdigit():
                 print("Wonder choice must be an integer!")
                 return self.wonder_input(player, remaining_wonders, selectable, shift)
@@ -524,16 +528,12 @@ class Game:
         # selectable_dict[-2] = [1] * len(image_dict[-2])
         selectable_dict[-2] = [card.card_type for card in self.players[1].cards_in_play]
         image = ImageDisplay(220, 350)
-        age = self.state_variables.current_age
-        military = self.state_variables.military_track
-        m_tokens = self.state_variables.military_tokens
+        age, military = self.state_variables.current_age, self.state_variables.military_track
+        m_tokens, p_tokens = self.state_variables.military_tokens, self.progress_board.tokens
         coins = {-1: self.players[0].coins, -2: self.players[1].coins}
-        p_tokens = self.progress_board.tokens
         p_tokens_in_play = {-1: self.players[0].progress_tokens_in_play, -2: self.players[1].progress_tokens_in_play}
-        image.display_board(image_dict, selectable_dict, max_row, age, military, m_tokens, coins, p_tokens, p_tokens_in_play)
-
-        # TODO Add visual representation of wonders_in_hand to player board
-        # TODO Add visual representation of wonders_in_play to player board
+        wonders = {-1:[self.players[0].wonders_in_hand, self.players[0].wonders_in_play], -2:[self.players[1].wonders_in_hand, self.players[1].wonders_in_play]}
+        image.display_board(image_dict, selectable_dict, max_row, age, military, m_tokens, coins, p_tokens, p_tokens_in_play, wonders)
 
     # Displays the game state in a nice enough way.
     def display_game_state(self):
