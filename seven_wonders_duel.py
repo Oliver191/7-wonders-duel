@@ -288,8 +288,8 @@ class Game:
 
             # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
-            self.state_variables.progress_age()
             self.players[player].replay = False
+            self.state_variables.progress_age()
         else:  # Otherwise, update all cards in current age and change turn turn_player
             self.age_boards[age].update_all()
             if not self.players[player].replay:
@@ -886,6 +886,8 @@ class Player:
                 for i in ['Grey', 'Brown', 'Red', 'Yellow']:
                     if i in effect_active:
                         type_count = len([1 for card in player_board if card.card_type == i])
+                        if card.card_type == 'Yellow':
+                            type_count += 1 #includes itself
                         self.coins += type_count * int(list(effect_active[0])[0])
                 if 'Wonder' in effect_active:
                     self.coins += len(self.wonders_in_play) * int(list(effect_active[0])[0])
