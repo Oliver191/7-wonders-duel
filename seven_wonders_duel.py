@@ -214,7 +214,7 @@ class Game:
         if action == 'c':
             # Add card to board.
             if self.card_constructable(player_state, opponent_state, chosen_position.card_in_slot) is True:
-                player_state.construct_card(chosen_position.card_in_slot, player_board, opponent_board)
+                player_state.construct_card(chosen_position.card_in_slot, player_board, opponent_board, False)
             else:
                 print('You do not have the resources required to construct this card!')
                 return self.request_player_input()
@@ -222,11 +222,13 @@ class Game:
             # Gain coins based on yellow building owned.
             yellow_card_count = len([card for card in player_board if card.card_type == 'Yellow'])
             player_state.coins += 2 + yellow_card_count
+            self.state_variables.discarded_cards.append(chosen_position.card_in_slot)
         elif action == 'w':
             if position_wonder in range(len(player_state.wonders_in_hand)):
                 if not [wonder.wonder_in_play for wonder in player_state.wonders_in_hand][position_wonder]:
                     if self.wonder_constructable(player_state, opponent_state, position_wonder):
-                        player_state.construct_wonder(position_wonder, opponent_state, player)
+                        player_state.construct_wonder(position_wonder, opponent_state, player, self.state_variables.discarded_cards,
+                                                      player_board, opponent_board, self.progress_board)
                         if len(self.players[0].wonders_in_play + self.players[1].wonders_in_play) == 7:
                             for i in range(len(self.players[0].wonders_in_hand)):
                                 player_state.wonders_in_hand[i].wonder_in_play = True
@@ -250,6 +252,10 @@ class Game:
         self.state_variables.turn_choice = False
         chosen_position.card_in_slot = None
         player_state.update()
+
+        print("")
+        print(self.progress_board.discarded_tokens)
+        print("")
 
         # Update military conflict and check for military victory
         self.state_variables.update_military_track(self.players[0].military_points, self.players[1].military_points)
@@ -493,7 +499,7 @@ class Game:
         if any(match_science) and any([token.token_in_slot for token in self.progress_board.tokens]):
             self.state_variables.progress_tokens_awarded[match_science.index(True)] = True
             token = self.select_token()
-            self.players[player].construct_token(token, self.progress_board)
+            self.players[player].construct_token(self.progress_board.tokens[token], self.progress_board)
             self.progress_board.tokens[token].token_in_slot = False
 
     # Requests player input to select one of the tokens still available where token_in_slot == True
@@ -782,6 +788,7 @@ class PorgressBoard:
     '''Define the progress board in which the progress tokens are slotted into'''
 
     def __init__(self):
+        self.discarded_tokens = []
         self.tokens = self.prepare_progress_board()
 
     def __repr__(self):
@@ -797,12 +804,14 @@ class PorgressBoard:
 
     # read tokens, randomly select 5, and slot them into the board
     def prepare_progress_board(self):
-        token_count = 5
+        token_count = 5 + 3
         token_list = np.genfromtxt('progress_tokens.csv', delimiter=',', skip_header=1, dtype=str)
         chosen_tokens = token_list[np.random.choice(token_list.shape[0], token_count, replace=False)]
         tokens = []
         for token in chosen_tokens:
             tokens.append(ProgressToken(token[0], token[1], token[2], True))
+        self.discarded_tokens = tokens[5:]
+        tokens = tokens[:5]
         return tokens
 
 class Player:
@@ -864,12 +873,12 @@ class Player:
                    )
 
     # removal of card from game board is done elsewhere! (in Game.select_card method).
-    def construct_card(self, card, player_board, opponent_board):
+    def construct_card(self, card, player_board, opponent_board, free):
         '''Function to construct a card in a players tableau'''
         # decrease coins of player by card cost
         cost, counts = np.unique(list(card.card_cost), return_counts=True)  # split string and return unique values and their counts
         cards = [card.card_name for card in player_board]
-        if '$' in card.card_cost and card.card_prerequisite not in cards: #free construction condition
+        if '$' in card.card_cost and card.card_prerequisite not in cards and not free: #free construction condition
             self.coins -= counts[np.where(cost == '$')[0]][0] # decrease coins by card cost
         owned_tokens = [token.token_name for token in self.progress_tokens_in_play]
 
@@ -920,10 +929,11 @@ class Player:
 
     # TODO create construct_wonder function to apply effects and move card from in_hand to in_play
     # Construct the selected wonder by applying their respective effect
-    def construct_wonder(self, position_wonder, opponent, player_turn):
+    def construct_wonder(self, position_wonder, opponent, player_turn, discarded_cards, player_board, opponent_board, progress_board):
         wonder = self.wonders_in_hand[position_wonder]
         effect = wonder.wonder_effect_when_played
         effect_passive = wonder.wonder_effect_passive
+        discarded_tokens = progress_board.discarded_tokens
 
         if 'V' in effect:
             self.victory_points += int(effect[0])
@@ -940,9 +950,13 @@ class Player:
         if 'Replay' in effect_passive:
             self.replay = True
         elif 'Grey' in effect_passive:
-            self.destory_card(opponent, 'Grey', player_turn)
+            self.wonder_destory_card(opponent, 'Grey', player_turn, discarded_cards)
         elif 'Brown' in effect_passive:
-            self.destory_card(opponent, 'Brown', player_turn)
+            self.wonder_destory_card(opponent, 'Brown', player_turn, discarded_cards)
+        elif wonder.wonder_name == 'The Mausoleum':
+            self.wonder_mausoleum(discarded_cards, player_turn, player_board, opponent_board)
+        elif wonder.wonder_name == 'The Great Library':
+            self.wonder_great_library(discarded_tokens, player_turn, progress_board)
 
         wonder.wonder_in_play = True
         self.wonders_in_hand[position_wonder].wonder_in_play = True
@@ -950,60 +964,110 @@ class Player:
         return
 
     # Enables the player to discard one card from his opponent in the specified color
-    def destory_card(self, opponent, color, player_turn):
+    def wonder_destory_card(self, opponent, color, player_turn, discarded_cards):
         opponent_cards = [card for card in opponent.cards_in_play if card.card_type == color]
         opponent_turn = player_turn ^ 1
 
         if len(opponent_cards) >= 2:
-            cards = '['
-            for i in range(len(opponent_cards)):
-                cards += '#' + str(i) + ' ' + str(opponent_cards[i])
-                cards += ', '
-            cards = cards[:-2]
-            cards += ']'
-
+            cards = self.print_string(opponent_cards)
             print("")
-            print(color + " cards of Player " + str(opponent_turn +1) + ": " + cards)
-            choice = input("PLAYER " + str(player_turn + 1) + ": "
-                           + "Select a " + color + " card of Player " + str(opponent_turn +1) + " to discard.")
-
-            if choice == '':
-                print("Select a valid action!")
-                return self.destory_card(opponent, color, player_turn)
-            action, position = choice[0], choice[1:]
-
-            if action == 's':
-                image = ImageDisplay(220, 350)
-                image.display_color_card(opponent_cards)
-                return self.destory_card(opponent, color, player_turn)
-            elif action == 'd':
-                if not position.isdigit():
-                    print("Card choice must be an integer!")
-                    return self.destory_card(opponent, color, player_turn)
-                elif int(position) in range(len(opponent_cards)):
-                    card = opponent_cards[int(position)]
-                    opponent.cards_in_play.remove(card)
-                    resource = ['C', 'W', 'S', 'P', 'G']
-                    resource_names = ['clay', 'wood', 'stone', 'paper', 'glass']
-                    if card.card_effect_passive[1] in resource:
-                        resource_name = resource_names[resource.index(card.card_effect_passive[1])]
-                        setattr(opponent, resource_name, getattr(opponent, resource_name) - int(card.card_effect_passive[0]))
-                else:
-                    print('Select a valid ' + color + " card!")
-                    return self.destory_card(opponent, color, player_turn)
+            print(color + " cards of Player " + str(opponent_turn + 1) + ": " + cards)
+            input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a " + color + " card of Player " + \
+                           str(opponent_turn + 1) + " to discard. "
+            result = self.request_input(input_string,self.wonder_destory_card,opponent_cards, 'd', 'Card')
+            if type(result) is int:
+                card = opponent_cards[result]
+                self.discard_card(card, opponent, discarded_cards)
             else:
-                print("Select a valid action!")
-                return self.destory_card(opponent, color, player_turn)
+                result(opponent, color, player_turn, discarded_cards)
         elif len(opponent_cards) == 1:
             card = opponent_cards[0]
             print("")
             print(str(card) + " of Player " + str(opponent_turn + 1) + " is discarded.")
-            opponent.cards_in_play.remove(card)
-            resource = ['C', 'W', 'S', 'P', 'G']
-            resource_names = ['clay', 'wood', 'stone', 'paper', 'glass']
-            if card.card_effect_passive[1] in resource:
-                resource_name = resource_names[resource.index(card.card_effect_passive[1])]
-                setattr(opponent, resource_name, getattr(opponent, resource_name) - int(card.card_effect_passive[0]))
+            self.discard_card(card, opponent, discarded_cards)
+
+    # Sub-function which actually removes the card from the board and reduces resources
+    def discard_card(self, card, opponent, discarded_cards):
+        opponent.cards_in_play.remove(card)
+        resource = ['C', 'W', 'S', 'P', 'G']
+        resource_names = ['clay', 'wood', 'stone', 'paper', 'glass']
+        if card.card_effect_passive[1] in resource:
+            resource_name = resource_names[resource.index(card.card_effect_passive[1])]
+            setattr(opponent, resource_name, getattr(opponent, resource_name) - int(card.card_effect_passive[0]))
+        discarded_cards.append(card)
+
+    # Enables the player to pick a discarded card and construct it for free
+    def wonder_mausoleum(self, discarded_cards, player_turn, player_board, opponent_board):
+        if len(discarded_cards) >= 2:
+            cards = self.print_string(discarded_cards)
+            print("")
+            print("Discarded cards since the beginning of the game: " + cards)
+            input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a discarded card and construct it for free. "
+
+            result = self.request_input(input_string, self.wonder_mausoleum, discarded_cards, 'c', 'Card')
+            if type(result) is int:
+                card = discarded_cards[result]
+                discarded_cards.remove(card)
+                self.construct_card(card, player_board, opponent_board, True)
+            else:
+                result(discarded_cards, player_turn, player_board, opponent_board)
+        elif len(discarded_cards) == 1:
+            card = discarded_cards[0]
+            print("")
+            print("Discarded card " + str(card) + " is constructed for free.")
+            discarded_cards.remove(card)
+            self.construct_card(card, player_board, opponent_board, True)
+
+    # Enables the player to pick 1 from 3 discarded Progress Tokens
+    def wonder_great_library(self, discarded_tokens, player_turn, progress_board):
+        tokens = self.print_string(discarded_tokens)
+        print("")
+        print("3 random discarded tokens from the beginning of the game: " + tokens)
+        input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a discarded token and construct it for free. "
+        result = self.request_input(input_string, self.wonder_great_library, discarded_tokens, 'c', 'Token')
+        if type(result) is int:
+            token = discarded_tokens[result]
+            discarded_tokens.remove(token)
+            self.construct_token(token, progress_board)
+        else:
+            result(discarded_tokens, player_turn, progress_board)
+
+    # Sub-function to request player input
+    def request_input(self, input_string, function_false, card_list, key, print_object):
+        choice = input(input_string)
+        if choice == '':
+            print("Select a valid action!")
+            return function_false
+        action, position = choice[0], choice[1:]
+        if action == 's':
+            width, height = 220, 350
+            if print_object == 'Token':
+                width, height = 140, 140
+            image = ImageDisplay(width, height)
+            image.display_cards(card_list, print_object)
+            return function_false
+        elif action == key:
+            if not position.isdigit():
+                print(str(print_object) + " choice must be an integer!")
+                return function_false
+            elif int(position) in range(len(card_list)):
+                return int(position)
+            else:
+                print("Select a valid " + print_object.lower() + "!")
+                return function_false
+        else:
+            print("Select a valid action!")
+            return function_false
+
+    # Creates a string which can be used to print in the command line
+    def print_string(self, print_cards):
+        cards = '['
+        for i in range(len(print_cards)):
+            cards += '#' + str(i) + ' ' + str(print_cards[i])
+            cards += ', '
+        cards = cards[:-2]
+        cards += ']'
+        return cards
 
     def update(self):
         '''Updates player passive variables based on players tableau'''
@@ -1011,10 +1075,10 @@ class Player:
 
     # construct the selected token by applying their respective effect
     def construct_token(self, token, progress_board):
-        effect = progress_board.tokens[token].token_effect_when_played
-        name = progress_board.tokens[token].token_name
-        owned_tokens = [token.token_name for token in self.progress_tokens_in_play]
-        self.progress_tokens_in_play.append(progress_board.tokens[token])
+        effect = token.token_effect_when_played
+        name = token.token_name
+        owned_tokens = [own_token.token_name for own_token in self.progress_tokens_in_play]
+        self.progress_tokens_in_play.append(token)
         if 'Mathematics' in owned_tokens:
             self.victory_points += 3
         if 'V' in effect: # Agriculture & Philosophy token
@@ -1068,6 +1132,7 @@ class StateVariables:
         self.turn_choice = False
         self.max_card_counts = [0,0,0,0,0,0,0]
         self.progress_tokens_awarded = [False for i in range(6)]
+        self.discarded_cards = []
 
     def change_turn_player(self):
         '''Function to change current turn player'''

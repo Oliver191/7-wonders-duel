@@ -293,20 +293,25 @@ class ImageDisplay:
                     self.running = False
         pygame.quit()
 
-    def display_color_card(self, opponent_cards):
-        pygame.display.set_caption("Discard Card")
-        win = gw.getWindowsWithTitle("Discard Card")[0]
+    def display_cards(self, cards, print_object):
+        pygame.display.set_caption("Pick a " + print_object)
+        win = gw.getWindowsWithTitle("Pick a " + print_object)[0]
         win.minimize()
         win.restore()
         win.move(-620, -450)
-        multiple = self.get_multiple(7, len(opponent_cards))
-        self.screen = pygame.display.set_mode((min(7, len(opponent_cards)) * self.width, (1+multiple) * self.height))
-        combined_image = pygame.Surface((min(7, len(opponent_cards)) * self.width, (1+multiple) * self.height))
+        multiple = self.get_multiple(7, len(cards))
+        self.screen = pygame.display.set_mode((min(7, len(cards)) * self.width, (1+multiple) * self.height))
+        combined_image = pygame.Surface((min(7, len(cards)) * self.width, (1+multiple) * self.height))
 
-        for i in range(len(opponent_cards)):
+        for i in range(len(cards)):
             j = self.get_multiple(7, i + 1)
-            name = opponent_cards[i].card_name.replace(" ", "").lower()
-            img = pygame.image.load(f"images\{name}.jpg").convert_alpha()
+            if print_object == 'Card':
+                name = cards[i].card_name.replace(" ", "").lower()
+                img = pygame.image.load(f"images\{name}.jpg").convert_alpha()
+            elif print_object == 'Token':
+                name = cards[i].token_name
+                img = pygame.image.load(f"images\{name}.png").convert_alpha()
+                img = pygame.transform.scale(img, (140, 140))
             combined_image.blit(img, (self.width * (i - 7*j), j * self.height))
 
         self.screen.blit(combined_image, (0, 0))
