@@ -253,10 +253,6 @@ class Game:
         chosen_position.card_in_slot = None
         player_state.update()
 
-        print("")
-        print(self.progress_board.discarded_tokens)
-        print("")
-
         # Update military conflict and check for military victory
         self.state_variables.update_military_track(self.players[0].military_points, self.players[1].military_points)
         if self.state_variables.military_track >= 9:
@@ -359,7 +355,7 @@ class Game:
                     net_cost += i*(resources_needed - j)
         net_cost = self.variable_production(net_cost, cards, opponent, wonders) #Handle variable production
         if card.card_type == 'Blue' and 'Masonry' in owned_tokens:
-            net_cost = self.token_masonry(net_cost, cards, opponent)
+            net_cost = self.token_masonry_architecture(net_cost, cards, opponent)
         for i in list(net_cost): # calculates cost to trade for the resource
             trade_cost += self.calculate_rate(i, cards, opponent)
         if '$' in card.card_cost: #check if player has enough coins to construct the card
@@ -392,6 +388,8 @@ class Game:
                     constructable = False
                     net_cost += i * (resources_needed - j)
         net_cost = self.variable_production(net_cost, cards, opponent, wonders)  # Handle variable production
+        if 'Architecture' in owned_tokens:
+            net_cost = self.token_masonry_architecture(net_cost, cards, opponent)
         for i in list(net_cost): # calculates cost to trade for the resource
             trade_cost += self.calculate_rate(i, cards, opponent)
         if player.coins >= trade_cost: #trade for necessary resources to construct the card
@@ -464,8 +462,8 @@ class Game:
         return net_cost
 
 
-    # If the token Masonry is in posession, blue cards will cost 2 fewer resources
-    def token_masonry(self, net_cost, cards, opponent):
+    # If the token Masonry/Architecture is in posession, blue cards/wonders will cost 2 fewer resources
+    def token_masonry_architecture(self, net_cost, cards, opponent):
         if len(net_cost) <= 2:
             net_cost = ''
         else:
@@ -554,8 +552,7 @@ class Game:
     def show_board(self):
         age = self.state_variables.current_age
         slots_in_age = self.age_boards[age].card_positions
-        image_dict = {}
-        selectable_dict = {}
+        image_dict, selectable_dict = {}, {}
         row_list, counts = np.unique([int(slot.row) for slot in slots_in_age], return_counts=True)
         max_row = row_list[np.argmax(counts)] # get the row with max card number
         for i in row_list: # create an empty dict with the number of rows
@@ -579,10 +576,8 @@ class Game:
             image_dict[3].insert(1, 'black')
             selectable_dict[3].insert(1, 0)
         image_dict[-1] = [card.card_name.replace(" ", "").lower() for card in self.players[0].cards_in_play]
-        # selectable_dict[-1] = [1] * len(image_dict[-1])
         selectable_dict[-1] = [card.card_type for card in self.players[0].cards_in_play]
         image_dict[-2] = [card.card_name.replace(" ", "").lower() for card in self.players[1].cards_in_play]
-        # selectable_dict[-2] = [1] * len(image_dict[-2])
         selectable_dict[-2] = [card.card_type for card in self.players[1].cards_in_play]
         image = ImageDisplay(220, 350)
         age, military = self.state_variables.current_age, self.state_variables.military_track
@@ -927,13 +922,14 @@ class Player:
         self.cards_in_play.append(card)
         return
 
-    # TODO create construct_wonder function to apply effects and move card from in_hand to in_play
     # Construct the selected wonder by applying their respective effect
     def construct_wonder(self, position_wonder, opponent, player_turn, discarded_cards, player_board, opponent_board, progress_board):
         wonder = self.wonders_in_hand[position_wonder]
         effect = wonder.wonder_effect_when_played
         effect_passive = wonder.wonder_effect_passive
         discarded_tokens = progress_board.discarded_tokens
+        if 'Theology' in [token.token_name for token in self.progress_tokens_in_play]:
+            self.replay = True
 
         if 'V' in effect:
             self.victory_points += int(effect[0])
@@ -945,7 +941,7 @@ class Player:
         if 'M' in effect:
             self.military_points += int(effect[2])
         if '-' in effect:
-            opponent.coins -= int(effect[-2])
+            opponent.coins = max(0, opponent.coins - int(effect[-2]))
 
         if 'Replay' in effect_passive:
             self.replay = True
@@ -1089,12 +1085,12 @@ class Player:
             self.law = True
             print("")
             print("Player " + str(self.player_number + 1) + " >", self.__repr__())
-            self.token_law()
+            self.token_law(progress_board)
         elif name == 'Mathematics':
             self.victory_points += 3*len(owned_tokens) + 3
 
     # If the token Law is in posession, allow redeeming it for a scientific symbol
-    def token_law(self):
+    def token_law(self, progress_board):
         print("Player " + str(self.player_number + 1) +
               " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
         choice = input("PLAYER " + str(self.player_number + 1) + ": ")
@@ -1102,17 +1098,25 @@ class Player:
             print("Selected action was not valid. Resume game.")
             return print("")
         action, position = choice[0], choice[1:]
-        if action == 'r':
+        if action == 's':
+            tokens = progress_board.tokens.copy()
+            token_names = [token.token_name for token in tokens]
+            if 'Law' in token_names:
+                tokens.remove(tokens[token_names.index('Law')])
+            image = ImageDisplay(140, 140)
+            image.display_cards(tokens, 'Token')
+            return self.token_law(progress_board)
+        elif action == 'r':
             if not position.isdigit():
                 print("Symbol choice must be an integer!")
-                return self.token_law()
+                return self.token_law(progress_board)
             elif int(position) in range(len(self.science)):
                 self.science[int(position)] += 1
                 self.law = False
                 print("Token has been redeemed!")
             else:
                 print('Select a valid scientific symbol!')
-                return self.token_law()
+                return self.token_law(progress_board)
         else:
             print("Selected action was not valid. Resume game.")
             return print("")
