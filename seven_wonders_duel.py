@@ -131,7 +131,7 @@ class Game:
             valid_moves += ['r' + str(i) for i in range(len(self.players[player].science))]
         return valid_moves
 
-    def request_player_input(self):  # TODO When using AI, no need for player input, just needs to print AI choice.
+    def request_player_input(self):
         """Function to begin requesting player input
 
         Returns:
@@ -151,7 +151,7 @@ class Game:
                   " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
 
         input_string = "PLAYER " + str(self.state_variables.turn_player + 1) + ": " + "Select a card to [c]onstruct, [d]iscard for coins, or use for [w]onder. "
-        # + "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
+        # + "(Format is 'X#' where X is c/d and # is card position)")
         if self.players[self.state_variables.turn_player].player_type == 'agent':
             choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves(), input_string)
         else:
@@ -548,10 +548,10 @@ class Game:
         print("Player " + str(self.state_variables.turn_player + 1) +
               " gathered 2 matching scientific symbols.")
         input_string = "PLAYER " + str(self.state_variables.turn_player + 1) + ": " + "Please [c]onstruct a progress token from the Board. "
-        if self.player_type == 'agent':
-            choice = self.agent.getAction(self.valid_moves_token(), input_string)
+        if self.players[self.state_variables.turn_player].player_type == 'agent':
+            choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves_token(), input_string)
         else:
-            choice = self.agent.getAction(input_string)
+            choice = self.players[self.state_variables.turn_player].agent.getAction(input_string)
         if choice == '':
             print('This is not a valid action!')
             return self.select_token()
@@ -1158,7 +1158,7 @@ class Player:
         # print("\n Valid moves: " + str(self.valid_moves_token_law()) + "\n")
         print("Player " + str(self.player_number + 1) +
               " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
-        input_string = input("PLAYER " + str(self.player_number + 1) + ": ")
+        input_string = "PLAYER " + str(self.player_number + 1) + ": "
         if self.player_type == 'agent':
             choice = self.agent.getAction(self.valid_moves_token_law(), input_string)
         else:
@@ -1333,4 +1333,3 @@ if __name__ == "__main__":
     agent_class = getattr(agent_module, agent_type) if agent_type is not None else None
     game1 = Game(game_count, [player1_type, player2_type], agent_class)
     pass
-    # game1.request_player_input()
