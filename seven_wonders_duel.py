@@ -3,20 +3,24 @@ import numpy as np
 from numpy.random import default_rng
 from sty import fg, bg, rs
 from seven_wonders_visual import ImageDisplay
+import argparse
+import importlib
+from testAgents import HumanAgent
 
 class Game:
     '''Define a single instance of a game'''
 
-    def __init__(self, game_count=1):
+    def __init__(self, game_count=1, player_type=['human', 'human'], agent_class=None):
         # Create a list of lists, one list per age containing the card objects for that age:
         self.age_boards = [Age(age) for age in range(1, 4)]
         self.game_count = game_count
-        self.players = [Player(0, 'human'), Player(1, 'human')]
+        self.players = [Player(0, player_type[0], agent_class), Player(1, player_type[1], agent_class)]
         self.state_variables = StateVariables()
         self.progress_board = PorgressBoard()
         self.draft_wonders()
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
+        self.request_player_input()
 
     def __repr__(self):
         return repr('Game Instance: ' + str(self.game_count))
@@ -73,10 +77,13 @@ class Game:
         selectable_wonders += ']'
 
         # print("\n Valid moves: " + str(self.valid_moves_wonder(remaining_wonders, selectable, shift)) + "\n")
-
         print("Wonders available: ", selectable_wonders)
-        choice = input("PLAYER " + str(player + 1) + ": "
-                       + "Select a remaining [w]onder of the " + str(count) + " available. ")
+        input_string = "PLAYER " + str(player + 1) + ": "+ "Select a remaining [w]onder of the " + str(count) + " available. "
+
+        if self.players[player].player_type == 'agent':
+            choice = self.players[player].agent.getAction(self.valid_moves_wonder(remaining_wonders, selectable, shift), input_string)
+        else:
+            choice = self.players[player].agent.getAction(input_string)
 
         if choice == '':
             print("Select a valid action!")
@@ -143,9 +150,12 @@ class Game:
             print("Player " + str(self.state_variables.turn_player + 1) +
                   " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
 
-        choice = input("PLAYER " + str(self.state_variables.turn_player + 1) + ": "
-                       + "Select a card to [c]onstruct, [d]iscard for coins, or use for [w]onder. ")
-                       #+ "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
+        input_string = "PLAYER " + str(self.state_variables.turn_player + 1) + ": " + "Select a card to [c]onstruct, [d]iscard for coins, or use for [w]onder. "
+        # + "(Format is 'X#' where X is c/d and # is card position)")  # TODO Select by name or number?
+        if self.players[self.state_variables.turn_player].player_type == 'agent':
+            choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves(), input_string)
+        else:
+            choice = self.players[self.state_variables.turn_player].agent.getAction(input_string)
 
         if choice == '':
             print("Select a valid action! (construct, discard or wonder)")
@@ -537,8 +547,11 @@ class Game:
         print("")
         print("Player " + str(self.state_variables.turn_player + 1) +
               " gathered 2 matching scientific symbols.")
-        choice = input("PLAYER " + str(self.state_variables.turn_player + 1) + ": "
-                       + "Please [c]onstruct a progress token from the Board. ")
+        input_string = "PLAYER " + str(self.state_variables.turn_player + 1) + ": " + "Please [c]onstruct a progress token from the Board. "
+        if self.player_type == 'agent':
+            choice = self.agent.getAction(self.valid_moves_token(), input_string)
+        else:
+            choice = self.agent.getAction(input_string)
         if choice == '':
             print('This is not a valid action!')
             return self.select_token()
@@ -844,10 +857,11 @@ class PorgressBoard:
 class Player:
     '''Define a class for play to track tableau cards, money, etc.'''
 
-    def __init__(self, player_number=0, player_type='human'):
+    def __init__(self, player_number=0, player_type='human', agent_class=None):
         # Private:
         self.player_number = player_number
         self.player_type = player_type
+        self.agent = self.initialize_player(agent_class)
 
         # Update as card is chosen through Game.construct_card method:
         self.coins = 7
@@ -868,6 +882,13 @@ class Player:
         self.science = [0,0,0,0,0,0]
         self.law = False
         self.replay = False
+
+    # initializes the player with the specified agent if the player_type is agent
+    def initialize_player(self, agent_class):
+        if self.player_type == 'agent':
+            return agent_class()
+        else:
+            return HumanAgent()
 
     def __repr__(self):
         in_hand, in_play = '[', '['
@@ -1065,7 +1086,10 @@ class Player:
     # Sub-function to request player input
     def request_input(self, input_string, function_false, card_list, key, print_object):
         # print("\n Valid moves: " + str(self.valid_moves_effect(card_list, key)) + "\n")
-        choice = input(input_string)
+        if self.player_type == 'agent':
+            choice = self.agent.getAction(self.valid_moves_effect(card_list, key), input_string)
+        else:
+            choice = self.agent.getAction(input_string)
         if choice == '':
             print("Select a valid action!")
             return function_false
@@ -1134,7 +1158,11 @@ class Player:
         # print("\n Valid moves: " + str(self.valid_moves_token_law()) + "\n")
         print("Player " + str(self.player_number + 1) +
               " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
-        choice = input("PLAYER " + str(self.player_number + 1) + ": ")
+        input_string = input("PLAYER " + str(self.player_number + 1) + ": ")
+        if self.player_type == 'agent':
+            choice = self.agent.getAction(self.valid_moves_token_law(), input_string)
+        else:
+            choice = self.agent.getAction(input_string)
         if choice == '':
             print("Selected action was not valid. Resume game.")
             return print("")
@@ -1290,6 +1318,19 @@ class Age:
 
 # To run the game
 if __name__ == "__main__":
-    game1 = Game(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-g", "--game_count", type=int, default=1, help="Number of games")
+    parser.add_argument("-p1", "--player1_type", type=str, default='human', help="Type of Player 1")
+    parser.add_argument("-p2", "--player2_type", type=str, default='human', help="Type of Player 2")
+    parser.add_argument("-a", "--agent_type", type=str, default=None, help="Type of Agent to import")
+    args = parser.parse_args()
+
+    game_count = args.game_count
+    player1_type = args.player1_type
+    player2_type = args.player2_type
+    agent_type = args.agent_type
+    agent_module = importlib.import_module('testAgents')
+    agent_class = getattr(agent_module, agent_type) if agent_type is not None else None
+    game1 = Game(game_count, [player1_type, player2_type], agent_class)
     pass
-    game1.request_player_input()
+    # game1.request_player_input()
