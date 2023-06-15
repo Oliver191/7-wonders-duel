@@ -55,6 +55,11 @@ class Game:
         print("Player 2 Wonders: ", self.players[1].wonders_in_hand)
         print("")
 
+    # Generates all valid moves a player can take during wonder drafting
+    def valid_moves_wonder(self, remaining_wonders, selectable, shift):
+        valid_moves = ['w'+str(i) for i in range(len(remaining_wonders)) if selectable[i + shift]]
+        return valid_moves
+
     #Select a single wonder during wonder drafting
     def wonder_input(self, player, remaining_wonders, selectable, shift):
         count = 0
@@ -66,6 +71,8 @@ class Game:
             selectable_wonders += ', '
         selectable_wonders = selectable_wonders[:-2]
         selectable_wonders += ']'
+
+        # print("\n Valid moves: " + str(self.valid_moves_wonder(remaining_wonders, selectable, shift)) + "\n")
 
         print("Wonders available: ", selectable_wonders)
         choice = input("PLAYER " + str(player + 1) + ": "
@@ -96,6 +103,26 @@ class Game:
             print("Select a valid action!")
             return self.wonder_input(player, remaining_wonders, selectable, shift)
 
+    def valid_moves(self):
+        '''Returns list of valid moves for given board state and player states'''
+        player = self.state_variables.turn_player
+        opponent = player ^ 1
+        cards = self.age_boards[self.state_variables.current_age].card_positions
+        selectable = [cardslot.card_board_position for cardslot in cards if cardslot.card_selectable == 1 and cardslot.card_in_slot is not None]
+        valid_moves = ['d' + str(i) for i in selectable]
+        for i in selectable:
+            if self.card_constructable(self.players[player], self.players[opponent], cards[i].card_in_slot, True):
+                valid_moves.append('c'+str(i))
+        wonder_played = [wonder.wonder_in_play for wonder in self.players[player].wonders_in_hand]
+        for i in range(len(wonder_played)):
+            if not wonder_played[i]:
+                if self.wonder_constructable(self.players[player], self.players[opponent], i, True):
+                    valid_moves += ['w' + str(j) + ' ' + str(i) for j in selectable]
+        if self.state_variables.turn_choice:
+            valid_moves.append('turn')
+        if self.players[player].law:
+            valid_moves += ['r' + str(i) for i in range(len(self.players[player].science))]
+        return valid_moves
 
     def request_player_input(self):  # TODO When using AI, no need for player input, just needs to print AI choice.
         """Function to begin requesting player input
@@ -103,6 +130,8 @@ class Game:
         Returns:
             void: [description]
         """
+        # print("\n Valid moves: " + str(self.valid_moves()) + "\n")
+
         if self.state_variables.turn_choice:
             print("")
             print("As the player with the weaker military, you are allowed to choose who begins the next Age.")
@@ -213,7 +242,7 @@ class Game:
         # Discard or construct chosen card and remove card from board
         if action == 'c':
             # Add card to board.
-            if self.card_constructable(player_state, opponent_state, chosen_position.card_in_slot) is True:
+            if self.card_constructable(player_state, opponent_state, chosen_position.card_in_slot, False) is True:
                 player_state.construct_card(chosen_position.card_in_slot, player_board, opponent_board, False)
             else:
                 print('You do not have the resources required to construct this card!')
@@ -226,7 +255,7 @@ class Game:
         elif action == 'w':
             if position_wonder in range(len(player_state.wonders_in_hand)):
                 if not [wonder.wonder_in_play for wonder in player_state.wonders_in_hand][position_wonder]:
-                    if self.wonder_constructable(player_state, opponent_state, position_wonder):
+                    if self.wonder_constructable(player_state, opponent_state, position_wonder, False):
                         player_state.construct_wonder(position_wonder, opponent_state, player, self.state_variables.discarded_cards,
                                                       player_board, opponent_board, self.progress_board)
                         if len(self.players[0].wonders_in_play + self.players[1].wonders_in_play) == 7:
@@ -333,7 +362,7 @@ class Game:
         return self.request_player_input()
 
     # Takes 2 Player objects and 1 Card object and checks whether card is constructable given state and cost.
-    def card_constructable(self, player, opponent, card):
+    def card_constructable(self, player, opponent, card, check):
         '''Checks whether a card is constructable given current player states'''
         cost, counts = np.unique(list(card.card_cost), return_counts=True) #split string and return unique values and their counts
         trade_cost, coins_needed, constructable = 0, 0, True
@@ -343,7 +372,7 @@ class Game:
         owned_tokens = [token.token_name for token in player.progress_tokens_in_play]
         opponent_tokens = [token.token_name for token in opponent.progress_tokens_in_play]
         if card.card_prerequisite in cards: #free construction condition
-            if 'Urbanism' in owned_tokens:
+            if 'Urbanism' in owned_tokens and not check:
                 player.coins += 4
             return constructable
         # check if player has insufficient resources to construct the card
@@ -364,13 +393,14 @@ class Game:
                 constructable = False
         if player.coins >= trade_cost + coins_needed: #trade for necessary resources to construct the card
             constructable = True
-            player.coins -= trade_cost
-            if 'Economy' in opponent_tokens:
-                self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
+            if not check:
+                player.coins -= trade_cost
+                if 'Economy' in opponent_tokens:
+                    self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable #False if cost or materials > players coins or materials
 
     # Checks whether the wonder is constructable given state and cost.
-    def wonder_constructable(self, player, opponent, position_wonder):
+    def wonder_constructable(self, player, opponent, position_wonder, check):
         wonder = player.wonders_in_hand[position_wonder]
         cost, counts = np.unique(list(wonder.wonder_cost), return_counts=True)
         trade_cost, constructable = 0, True
@@ -394,9 +424,10 @@ class Game:
             trade_cost += self.calculate_rate(i, cards, opponent)
         if player.coins >= trade_cost: #trade for necessary resources to construct the card
             constructable = True
-            player.coins -= trade_cost
-            if 'Economy' in opponent_tokens:
-                self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
+            if not check:
+                player.coins -= trade_cost
+                if 'Economy' in opponent_tokens:
+                    self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable
 
     # Chooses the resource with the highest trading cost and uses variable production for it, if available
@@ -502,6 +533,7 @@ class Game:
 
     # Requests player input to select one of the tokens still available where token_in_slot == True
     def select_token(self):
+        # print("\n Valid moves: " + str(self.valid_moves_token()))
         print("")
         print("Player " + str(self.state_variables.turn_player + 1) +
               " gathered 2 matching scientific symbols.")
@@ -532,6 +564,11 @@ class Game:
             print('This is not a valid action!')
             return self.select_token()
 
+    # Generates all valid moves a player can take during token selection
+    def valid_moves_token(self):
+        valid_moves = ['c' + str(i) for i in range(len(self.progress_board.tokens)) if self.progress_board.tokens[i].token_in_slot]
+        return valid_moves
+
     # Calculates the rate at which a resource can be bought
     def calculate_rate(self, resource, cards, opponent):
         resource_counts = [opponent.clay, opponent.wood, opponent.stone, opponent.paper, opponent.glass]
@@ -543,11 +580,6 @@ class Game:
         if 'Customs House' in cards and resource in ['P', 'G']:
             rate = 1
         return rate
-
-    # Takes 2 Player objects and 1 Card object and constructs the card if possible. If it cannot, returns False.
-    def valid_moves(self, player, opponent, age):  # TODO Return list of valid moves for current player.
-        '''Returns list of valid moves for given board state and player states'''
-        return
 
     def show_board(self):
         age = self.state_variables.current_age
@@ -1032,6 +1064,7 @@ class Player:
 
     # Sub-function to request player input
     def request_input(self, input_string, function_false, card_list, key, print_object):
+        # print("\n Valid moves: " + str(self.valid_moves_effect(card_list, key)) + "\n")
         choice = input(input_string)
         if choice == '':
             print("Select a valid action!")
@@ -1056,6 +1089,11 @@ class Player:
         else:
             print("Select a valid action!")
             return function_false
+
+    # Generates all valid moves a player can take during wonder effects
+    def valid_moves_effect(self, card_list, key):
+        valid_moves = [key + str(i) for i in range(len(card_list))]
+        return valid_moves
 
     # Creates a string which can be used to print in the command line
     def print_string(self, print_cards):
@@ -1093,6 +1131,7 @@ class Player:
 
     # If the token Law is in posession, allow redeeming it for a scientific symbol
     def token_law(self, progress_board):
+        # print("\n Valid moves: " + str(self.valid_moves_token_law()) + "\n")
         print("Player " + str(self.player_number + 1) +
               " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
         choice = input("PLAYER " + str(self.player_number + 1) + ": ")
@@ -1122,6 +1161,12 @@ class Player:
         else:
             print("Selected action was not valid. Resume game.")
             return print("")
+
+    # Generates all valid moves a player can take when redeeming the law token
+    def valid_moves_token_law(self):
+        valid_moves = ['r' + str(i) for i in range(len(self.science))]
+        valid_moves.append('q')
+        return valid_moves
 
 class StateVariables:
     '''Class to represent all state variables shared between players (military, turn player, etc.)'''
