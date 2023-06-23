@@ -10,21 +10,34 @@ from testAgents import HumanAgent
 class Game:
     '''Define a single instance of a game'''
 
-    def __init__(self, game_count=1, player_type=['human', 'human'], agent_class=None):
+    def __init__(self, game_count=1, agent_class=[None, None]):
         # Create a list of lists, one list per age containing the card objects for that age:
         self.age_boards = [Age(age) for age in range(1, 4)]
         self.game_count = game_count
-        self.players = [Player(0, player_type[0], agent_class), Player(1, player_type[1], agent_class)]
+        player_type = ['human' if agent is None else 'agent' for agent in agent_class]
+        self.players = [Player(0, player_type[0], agent_class[0]), Player(1, player_type[1], agent_class[1])]
         self.state_variables = StateVariables()
         self.progress_board = PorgressBoard()
+        self.outcome, self.state = None, None
         self.draft_wonders()
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
-        self.outcome = None
         self.request_player_input()
+
 
     def __repr__(self):
         return repr(self.outcome)
+
+    #Copy all essential information of the current game state
+    def copy_state(self):
+        player = self.state_variables.turn_player
+        state = {'age_board': self.age_boards[self.state_variables.current_age].card_positions.copy(),
+                 'player': self.players[player],
+                 'opponent': self.players[player ^ 1],
+                 'state_variables': self.state_variables,
+                 'progress_board': self.progress_board
+                 }
+        return state
 
     #Draft wonders by selecting 8 random ones and letting players choose them in turn
     def draft_wonders(self):
@@ -82,7 +95,8 @@ class Game:
         input_string = "PLAYER " + str(player + 1) + ": "+ "Select a remaining [w]onder of the " + str(count) + " available. "
 
         if self.players[player].player_type == 'agent':
-            choice = self.players[player].agent.getAction(self.valid_moves_wonder(remaining_wonders, selectable, shift), input_string)
+            self.state = self.copy_state()
+            choice = self.players[player].agent.getAction(self.valid_moves_wonder(remaining_wonders, selectable, shift), input_string, self.state, 'other')
         else:
             choice = self.players[player].agent.getAction(input_string)
 
@@ -139,6 +153,8 @@ class Game:
             void: [description]
         """
         # print("\n Valid moves: " + str(self.valid_moves()) + "\n")
+        player = self.state_variables.turn_player
+        self.state = self.copy_state()
 
         if self.state_variables.turn_choice:
             print("")
@@ -146,17 +162,17 @@ class Game:
             print("Enter [turn] to allow your opponent to begin.")
             print("Otherwise continue playing:")
 
-        if self.players[self.state_variables.turn_player].law:
+        if self.players[player].law:
             print("")
-            print("Player " + str(self.state_variables.turn_player + 1) +
+            print("Player " + str(player + 1) +
                   " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
 
-        input_string = "PLAYER " + str(self.state_variables.turn_player + 1) + ": " + "Select a card to [c]onstruct, [d]iscard for coins, or use for [w]onder. "
+        input_string = "PLAYER " + str(player + 1) + ": " + "Select a card to [c]onstruct, [d]iscard for coins, or use for [w]onder. "
         # + "(Format is 'X#' where X is c/d and # is card position)")
-        if self.players[self.state_variables.turn_player].player_type == 'agent':
-            choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves(), input_string)
+        if self.players[player].player_type == 'agent':
+            choice = self.players[player].agent.getAction(self.valid_moves(), input_string, self.state, 'main')
         else:
-            choice = self.players[self.state_variables.turn_player].agent.getAction(input_string)
+            choice = self.players[player].agent.getAction(input_string)
 
         if choice == '':
             print("Select a valid action! (construct, discard or wonder)")
@@ -164,11 +180,11 @@ class Game:
         action, position, position_wonder = choice[0], choice[1:], "0"
 
         # If the player owns the law token, allow redeeming it in exchange for a scientific symbol
-        if self.players[self.state_variables.turn_player].law and action == 'r':
-            self.token_law(self.state_variables.turn_player, position)
+        if self.players[player].law and action == 'r':
+            self.token_law(player, position)
             # Check for scientific victory
-            if all([symbol >= 1 for symbol in self.players[self.state_variables.turn_player].science]):
-                self.outcome = 'Player ' + str(self.state_variables.turn_player + 1) + ' has won the Game through Scientific Victory!'
+            if all([symbol >= 1 for symbol in self.players[player].science]):
+                self.outcome = 'Player ' + str(player + 1) + ' has won the Game through Scientific Victory!'
                 return self.outcome
 
         if choice == 'turn' and self.state_variables.turn_choice:
@@ -210,7 +226,7 @@ class Game:
                 return self.request_player_input()
 
         if action != 'c' and action != 'd' and action != 'w':
-            if not self.players[self.state_variables.turn_player].law or not action == 'r':
+            if not self.players[player].law or not action == 'r':
                 print("Select a valid action! (construct, discard or wonder)")
             return self.request_player_input()
 
@@ -270,7 +286,7 @@ class Game:
                 if not [wonder.wonder_in_play for wonder in player_state.wonders_in_hand][position_wonder]:
                     if self.wonder_constructable(player_state, opponent_state, position_wonder, False):
                         player_state.construct_wonder(position_wonder, opponent_state, player, self.state_variables.discarded_cards,
-                                                      player_board, opponent_board, self.progress_board)
+                                                      player_board, opponent_board, self.progress_board, self.state)
                         if len(self.players[0].wonders_in_play + self.players[1].wonders_in_play) == 7:
                             for i in range(len(self.players[0].wonders_in_hand)):
                                 player_state.wonders_in_hand[i].wonder_in_play = True
@@ -543,7 +559,7 @@ class Game:
         if any(match_science) and any([token.token_in_slot for token in self.progress_board.tokens]):
             self.state_variables.progress_tokens_awarded[match_science.index(True)] = True
             token = self.select_token()
-            self.players[player].construct_token(self.progress_board.tokens[token], self.progress_board)
+            self.players[player].construct_token(self.progress_board.tokens[token], self.progress_board, self.state)
             self.progress_board.tokens[token].token_in_slot = False
 
     # Requests player input to select one of the tokens still available where token_in_slot == True
@@ -554,7 +570,7 @@ class Game:
               " gathered 2 matching scientific symbols.")
         input_string = "PLAYER " + str(self.state_variables.turn_player + 1) + ": " + "Please [c]onstruct a progress token from the Board. "
         if self.players[self.state_variables.turn_player].player_type == 'agent':
-            choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves_token(), input_string)
+            choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves_token(), input_string, self.state, 'other')
         else:
             choice = self.players[self.state_variables.turn_player].agent.getAction(input_string)
         if choice == '':
@@ -983,7 +999,7 @@ class Player:
         return
 
     # Construct the selected wonder by applying their respective effect
-    def construct_wonder(self, position_wonder, opponent, player_turn, discarded_cards, player_board, opponent_board, progress_board):
+    def construct_wonder(self, position_wonder, opponent, player_turn, discarded_cards, player_board, opponent_board, progress_board, state):
         wonder = self.wonders_in_hand[position_wonder]
         effect = wonder.wonder_effect_when_played
         effect_passive = wonder.wonder_effect_passive
@@ -1006,13 +1022,13 @@ class Player:
         if 'Replay' in effect_passive:
             self.replay = True
         elif 'Grey' in effect_passive:
-            self.wonder_destory_card(opponent, 'Grey', player_turn, discarded_cards)
+            self.wonder_destory_card(opponent, 'Grey', player_turn, discarded_cards, state)
         elif 'Brown' in effect_passive:
-            self.wonder_destory_card(opponent, 'Brown', player_turn, discarded_cards)
+            self.wonder_destory_card(opponent, 'Brown', player_turn, discarded_cards, state)
         elif wonder.wonder_name == 'The Mausoleum':
-            self.wonder_mausoleum(discarded_cards, player_turn, player_board, opponent_board)
+            self.wonder_mausoleum(discarded_cards, player_turn, player_board, opponent_board, state)
         elif wonder.wonder_name == 'The Great Library':
-            self.wonder_great_library(discarded_tokens, player_turn, progress_board)
+            self.wonder_great_library(discarded_tokens, player_turn, progress_board, state)
 
         wonder.wonder_in_play = True
         self.wonders_in_hand[position_wonder].wonder_in_play = True
@@ -1020,7 +1036,7 @@ class Player:
         return
 
     # Enables the player to discard one card from his opponent in the specified color
-    def wonder_destory_card(self, opponent, color, player_turn, discarded_cards):
+    def wonder_destory_card(self, opponent, color, player_turn, discarded_cards, state):
         opponent_cards = [card for card in opponent.cards_in_play if card.card_type == color]
         opponent_turn = player_turn ^ 1
 
@@ -1030,12 +1046,12 @@ class Player:
             print(color + " cards of Player " + str(opponent_turn + 1) + ": " + cards)
             input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a " + color + " card of Player " + \
                            str(opponent_turn + 1) + " to discard. "
-            result = self.request_input(input_string,self.wonder_destory_card,opponent_cards, 'd', 'Card')
+            result = self.request_input(input_string,self.wonder_destory_card,opponent_cards, 'd', 'Card', state)
             if type(result) is int:
                 card = opponent_cards[result]
                 self.discard_card(card, opponent, discarded_cards)
             else:
-                result(opponent, color, player_turn, discarded_cards)
+                result(opponent, color, player_turn, discarded_cards, state)
         elif len(opponent_cards) == 1:
             card = opponent_cards[0]
             print("")
@@ -1053,20 +1069,20 @@ class Player:
         discarded_cards.append(card)
 
     # Enables the player to pick a discarded card and construct it for free
-    def wonder_mausoleum(self, discarded_cards, player_turn, player_board, opponent_board):
+    def wonder_mausoleum(self, discarded_cards, player_turn, player_board, opponent_board, state):
         if len(discarded_cards) >= 2:
             cards = self.print_string(discarded_cards)
             print("")
             print("Discarded cards since the beginning of the game: " + cards)
             input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a discarded card and construct it for free. "
 
-            result = self.request_input(input_string, self.wonder_mausoleum, discarded_cards, 'c', 'Card')
+            result = self.request_input(input_string, self.wonder_mausoleum, discarded_cards, 'c', 'Card', state)
             if type(result) is int:
                 card = discarded_cards[result]
                 discarded_cards.remove(card)
                 self.construct_card(card, player_board, opponent_board, True)
             else:
-                result(discarded_cards, player_turn, player_board, opponent_board)
+                result(discarded_cards, player_turn, player_board, opponent_board, state)
         elif len(discarded_cards) == 1:
             card = discarded_cards[0]
             print("")
@@ -1075,24 +1091,24 @@ class Player:
             self.construct_card(card, player_board, opponent_board, True)
 
     # Enables the player to pick 1 from 3 discarded Progress Tokens
-    def wonder_great_library(self, discarded_tokens, player_turn, progress_board):
+    def wonder_great_library(self, discarded_tokens, player_turn, progress_board, state):
         tokens = self.print_string(discarded_tokens)
         print("")
         print("3 random discarded tokens from the beginning of the game: " + tokens)
         input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a discarded token and construct it for free. "
-        result = self.request_input(input_string, self.wonder_great_library, discarded_tokens, 'c', 'Token')
+        result = self.request_input(input_string, self.wonder_great_library, discarded_tokens, 'c', 'Token', state)
         if type(result) is int:
             token = discarded_tokens[result]
             discarded_tokens.remove(token)
-            self.construct_token(token, progress_board)
+            self.construct_token(token, progress_board, state)
         else:
-            result(discarded_tokens, player_turn, progress_board)
+            result(discarded_tokens, player_turn, progress_board, state)
 
     # Sub-function to request player input
-    def request_input(self, input_string, function_false, card_list, key, print_object):
+    def request_input(self, input_string, function_false, card_list, key, print_object, state):
         # print("\n Valid moves: " + str(self.valid_moves_effect(card_list, key)) + "\n")
         if self.player_type == 'agent':
-            choice = self.agent.getAction(self.valid_moves_effect(card_list, key), input_string)
+            choice = self.agent.getAction(self.valid_moves_effect(card_list, key), input_string, state, 'other')
         else:
             choice = self.agent.getAction(input_string)
         if choice == '':
@@ -1139,7 +1155,7 @@ class Player:
         return
 
     # construct the selected token by applying their respective effect
-    def construct_token(self, token, progress_board):
+    def construct_token(self, token, progress_board, state):
         effect = token.token_effect_when_played
         name = token.token_name
         owned_tokens = [own_token.token_name for own_token in self.progress_tokens_in_play]
@@ -1154,18 +1170,18 @@ class Player:
             self.law = True
             print("")
             print("Player " + str(self.player_number + 1) + " >", self.__repr__())
-            self.token_law(progress_board)
+            self.token_law(progress_board, state)
         elif name == 'Mathematics':
             self.victory_points += 3*len(owned_tokens) + 3
 
     # If the token Law is in posession, allow redeeming it for a scientific symbol
-    def token_law(self, progress_board):
+    def token_law(self, progress_board, state):
         # print("\n Valid moves: " + str(self.valid_moves_token_law()) + "\n")
         print("Player " + str(self.player_number + 1) +
               " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
         input_string = "PLAYER " + str(self.player_number + 1) + ": "
         if self.player_type == 'agent':
-            choice = self.agent.getAction(self.valid_moves_token_law(), input_string)
+            choice = self.agent.getAction(self.valid_moves_token_law(), input_string, state, 'other')
         else:
             choice = self.agent.getAction(input_string)
         if choice == '':
@@ -1324,30 +1340,30 @@ class Age:
 def supress_print(*args, **kwargs):
     pass
 
+def import_agent(agent_type):
+    agent_module = importlib.import_module('testAgents')
+    return getattr(agent_module, agent_type) if agent_type is not None else None
+
 # To run the game
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-g", "--game_count", type=int, default=1, help="Number of games")
-    parser.add_argument("-p1", "--player1_type", type=str, default='human', help="Type of Player 1")
-    parser.add_argument("-p2", "--player2_type", type=str, default='human', help="Type of Player 2")
-    parser.add_argument("-a", "--agent_type", type=str, default=None, help="Type of Agent to import")
+    parser.add_argument("-a1", "--agent1_type", type=str, default=None, help="Type of Agent 1 to import")
+    parser.add_argument("-a2", "--agent2_type", type=str, default=None, help="Type of Agent 2 to import")
     parser.add_argument("-s", "--supress", type=str, default='False', help="Game state not printed when True")
     args = parser.parse_args()
 
     original_print = print
     game_count = args.game_count
-    player1_type = args.player1_type
-    player2_type = args.player2_type
-    agent_type = args.agent_type
-    agent_module = importlib.import_module('testAgents')
-    agent_class = getattr(agent_module, agent_type) if agent_type is not None else None
+    agent1_class = import_agent(args.agent1_type)
+    agent2_class = import_agent(args.agent2_type)
     supress = True if args.supress == 'True' else False
     wins_player1, wins_player2, draws = 0, 0, 0
     if supress:
         print()
         print = supress_print
     for game_number in range(game_count):
-        game1 = Game(game_count, [player1_type, player2_type], agent_class)
+        game1 = Game(game_count, [agent1_class, agent2_class])
         string_game = str(game1)
         original_print(string_game)
         if 'Player' in string_game:
@@ -1358,8 +1374,9 @@ if __name__ == "__main__":
         else:
             draws += 1
     original_print()
-    original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_count))
-    original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_count))
+    agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
+    original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_count) + " (" + agent1 + ")")
+    original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_count) + " (" + agent2 + ")")
     original_print("Draws: " + str(draws) + "/" + str(game_count))
     pass
 
