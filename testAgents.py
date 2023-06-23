@@ -6,11 +6,14 @@ from sty import fg, bg, rs
 # asked for an action.
 class RandomAgent:
 
+    def __init__(self, defined_print):
+        self.print = defined_print
+
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string):
         choice = random.choice(valid_moves)
 
-        print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
+        self.print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
         return choice
 
 class HumanAgent:

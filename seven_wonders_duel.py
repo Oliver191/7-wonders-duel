@@ -20,10 +20,11 @@ class Game:
         self.draft_wonders()
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
+        self.outcome = None
         self.request_player_input()
 
     def __repr__(self):
-        return repr('Game Instance: ' + str(self.game_count))
+        return repr(self.outcome)
 
     #Draft wonders by selecting 8 random ones and letting players choose them in turn
     def draft_wonders(self):
@@ -167,7 +168,8 @@ class Game:
             self.token_law(self.state_variables.turn_player, position)
             # Check for scientific victory
             if all([symbol >= 1 for symbol in self.players[self.state_variables.turn_player].science]):
-                return print('Player ' + str(self.state_variables.turn_player + 1) + ' has won the Game through Scientific Victory!')
+                self.outcome = 'Player ' + str(self.state_variables.turn_player + 1) + ' has won the Game through Scientific Victory!'
+                return self.outcome
 
         if choice == 'turn' and self.state_variables.turn_choice:
             print("Your opponent is chosen to begin.")
@@ -176,7 +178,8 @@ class Game:
             return self.request_player_input()
 
         if action == 'q':
-            return print("Game has been quit")
+            self.outcome = "Game has been quit"
+            return self.outcome
 
         if choice == 'clear': # has been implemented for debugging
             # clear board and progress age
@@ -296,10 +299,12 @@ class Game:
         self.state_variables.update_military_track(self.players[0].military_points, self.players[1].military_points)
         if self.state_variables.military_track >= 9:
             self.display_game_state()
-            return print('Player 1 has won the Game through Military Supremacy!')
+            self.outcome = 'Player 1 has won the Game through Military Supremacy!'
+            return self.outcome
         elif self.state_variables.military_track <= -9:
             self.display_game_state()
-            return print('Player 2 has won the Game through Military Supremacy!')
+            self.outcome = 'Player 2 has won the Game through Military Supremacy!'
+            return self.outcome
 
         # Award victory points based on conflict pawn location
         self.update_conflict_points()
@@ -314,7 +319,8 @@ class Game:
         # Check for scientific victory
         if all([symbol >= 1 for symbol in self.players[player].science]):
             self.display_game_state()
-            return print('Player ' + str(player +1) + ' has won the Game through Scientific Victory!')
+            self.outcome = 'Player ' + str(player + 1) + ' has won the Game through Scientific Victory!'
+            return self.outcome
 
         # Award victory points based on purple cards
         if self.state_variables.current_age == 2: #only check in Age 3 to reduce computations
@@ -349,9 +355,9 @@ class Game:
             print('Victory Points Player 1: ', self.players[0].victory_points)
             print('Victory Points Player 2: ', self.players[1].victory_points)
             if self.players[0].victory_points > self.players[1].victory_points:
-                print('Player 1 has won the Game through Civilian Victory!')
+                self.outcome = 'Player 1 has won the Game through Civilian Victory!'
             elif self.players[0].victory_points < self.players[1].victory_points:
-                print('Player 2 has won the Game through Civilian Victory!')
+                self.outcome = 'Player 2 has won the Game through Civilian Victory!'
             else:
                 print('Both players have the same number of victory points.')
                 p1_blue_vp = sum([int(card.card_effect_passive[0]) for card in self.players[0].cards_in_play if card.card_type == 'Blue'])
@@ -359,13 +365,12 @@ class Game:
                 print('Victory Points Civilian Buildings Player 1: ', p1_blue_vp)
                 print('Victory Points Civilian Buildings Player 2: ', p2_blue_vp)
                 if p1_blue_vp > p2_blue_vp:
-                    print('Player 1 has won the Game with the most victory points from Civilian Buildings!')
+                    self.outcome = 'Player 1 has won the Game with the most victory points from Civilian Buildings!'
                 elif p1_blue_vp < p2_blue_vp:
-                    print('Player 2 has won the Game with the most victory points from Civilian Buildings!')
+                    self.outcome = 'Player 2 has won the Game with the most victory points from Civilian Buildings!'
                 else:
-                    print('Both players have the same number of victory points from Civilian Buildings.')
-                    print('The game ends in a draw!')
-            return
+                    self.outcome = 'Both players have the same number of victory points from Civilian Buildings. The game ends in a draw!'
+            return self.outcome
 
         # Continue game loop.
         self.display_game_state()
@@ -886,7 +891,7 @@ class Player:
     # initializes the player with the specified agent if the player_type is agent
     def initialize_player(self, agent_class):
         if self.player_type == 'agent':
-            return agent_class()
+            return agent_class(print)
         else:
             return HumanAgent()
 
@@ -1315,6 +1320,9 @@ class Age:
         for row in reversed(range(rows + 1)):
             print("Row", str(row + 1), ":", [card for card in cards if card.row == str(row)])
 
+# To supress print statements if required
+def supress_print(*args, **kwargs):
+    pass
 
 # To run the game
 if __name__ == "__main__":
@@ -1323,13 +1331,35 @@ if __name__ == "__main__":
     parser.add_argument("-p1", "--player1_type", type=str, default='human', help="Type of Player 1")
     parser.add_argument("-p2", "--player2_type", type=str, default='human', help="Type of Player 2")
     parser.add_argument("-a", "--agent_type", type=str, default=None, help="Type of Agent to import")
+    parser.add_argument("-s", "--supress", type=str, default='False', help="Game state not printed when True")
     args = parser.parse_args()
 
+    original_print = print
     game_count = args.game_count
     player1_type = args.player1_type
     player2_type = args.player2_type
     agent_type = args.agent_type
     agent_module = importlib.import_module('testAgents')
     agent_class = getattr(agent_module, agent_type) if agent_type is not None else None
-    game1 = Game(game_count, [player1_type, player2_type], agent_class)
+    supress = True if args.supress == 'True' else False
+    wins_player1, wins_player2, draws = 0, 0, 0
+    if supress:
+        print()
+        print = supress_print
+    for game_number in range(game_count):
+        game1 = Game(game_count, [player1_type, player2_type], agent_class)
+        string_game = str(game1)
+        original_print(string_game)
+        if 'Player' in string_game:
+            if string_game.split()[1] == "1":
+                wins_player1 += 1
+            elif string_game.split()[1] == "2":
+                wins_player2 += 1
+        else:
+            draws += 1
+    original_print()
+    original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_count))
+    original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_count))
+    original_print("Draws: " + str(draws) + "/" + str(game_count))
     pass
+
