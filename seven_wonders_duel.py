@@ -17,7 +17,7 @@ class Game:
         player_type = ['human' if agent is None else 'agent' for agent in agent_class]
         self.players = [Player(0, player_type[0], agent_class[0]), Player(1, player_type[1], agent_class[1])]
         self.state_variables = StateVariables()
-        self.progress_board = PorgressBoard()
+        self.progress_board = ProgressBoard()
         self.outcome, self.state = None, None
         self.draft_wonders()
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
@@ -31,7 +31,7 @@ class Game:
     #Copy all essential information of the current game state
     def copy_state(self):
         player = self.state_variables.turn_player
-        state = {'age_board': self.age_boards[self.state_variables.current_age].card_positions.copy(),
+        state = {'age_board': self.age_boards[self.state_variables.current_age].card_positions,
                  'player': self.players[player],
                  'opponent': self.players[player ^ 1],
                  'state_variables': self.state_variables,
@@ -90,7 +90,7 @@ class Game:
         selectable_wonders = selectable_wonders[:-2]
         selectable_wonders += ']'
 
-        # print("\n Valid moves: " + str(self.valid_moves_wonder(remaining_wonders, selectable, shift)) + "\n")
+        print("Valid moves: " + str(self.valid_moves_wonder(remaining_wonders, selectable, shift)) + "\n")
         print("Wonders available: ", selectable_wonders)
         input_string = "PLAYER " + str(player + 1) + ": "+ "Select a remaining [w]onder of the " + str(count) + " available. "
 
@@ -152,7 +152,7 @@ class Game:
         Returns:
             void: [description]
         """
-        # print("\n Valid moves: " + str(self.valid_moves()) + "\n")
+        print("Valid moves: " + str(self.valid_moves()) + "\n")
         player = self.state_variables.turn_player
         self.state = self.copy_state()
 
@@ -564,13 +564,13 @@ class Game:
 
     # Requests player input to select one of the tokens still available where token_in_slot == True
     def select_token(self):
-        # print("\n Valid moves: " + str(self.valid_moves_token()))
+        print("Valid moves: " + str(self.valid_moves_token()))
         print("")
         print("Player " + str(self.state_variables.turn_player + 1) +
               " gathered 2 matching scientific symbols.")
         input_string = "PLAYER " + str(self.state_variables.turn_player + 1) + ": " + "Please [c]onstruct a progress token from the Board. "
         if self.players[self.state_variables.turn_player].player_type == 'agent':
-            choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves_token(), input_string, self.state, 'other')
+            choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves_token(), input_string, self.state, 'token')
         else:
             choice = self.players[self.state_variables.turn_player].agent.getAction(input_string)
         if choice == '':
@@ -681,14 +681,10 @@ class Game:
         # keep track of old victory points (points_awarded)
         points_awarded = self.state_variables.victory_points_awarded
         # calculate new victory points (points)
-        if abs(military) in [0]:
-            points = 0
-        elif abs(military) in [1, 2]:
-            points = 2
-        elif abs(military) in [3, 4, 5]:
-            points = 5
-        elif abs(military) >= 6:
-            points = 10
+        if abs(military) in [0]: points = 0
+        elif abs(military) in [1, 2]: points = 2
+        elif abs(military) in [3, 4, 5]: points = 5
+        elif abs(military) >= 6: points = 10
 
         if military >= 0:
             if points_awarded >= 0:
@@ -845,7 +841,7 @@ class ProgressToken:
                    + self.token_name
                    + rs.all)
 
-class PorgressBoard:
+class ProgressBoard:
     '''Define the progress board in which the progress tokens are slotted into'''
 
     def __init__(self):
@@ -1046,7 +1042,7 @@ class Player:
             print(color + " cards of Player " + str(opponent_turn + 1) + ": " + cards)
             input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a " + color + " card of Player " + \
                            str(opponent_turn + 1) + " to discard. "
-            result = self.request_input(input_string,self.wonder_destory_card,opponent_cards, 'd', 'Card', state)
+            result = self.request_input(input_string,self.wonder_destory_card,opponent_cards, 'd', 'Card', state, 'destroy')
             if type(result) is int:
                 card = opponent_cards[result]
                 self.discard_card(card, opponent, discarded_cards)
@@ -1076,7 +1072,7 @@ class Player:
             print("Discarded cards since the beginning of the game: " + cards)
             input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a discarded card and construct it for free. "
 
-            result = self.request_input(input_string, self.wonder_mausoleum, discarded_cards, 'c', 'Card', state)
+            result = self.request_input(input_string, self.wonder_mausoleum, discarded_cards, 'c', 'Card', state, 'mausoleum')
             if type(result) is int:
                 card = discarded_cards[result]
                 discarded_cards.remove(card)
@@ -1096,7 +1092,7 @@ class Player:
         print("")
         print("3 random discarded tokens from the beginning of the game: " + tokens)
         input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a discarded token and construct it for free. "
-        result = self.request_input(input_string, self.wonder_great_library, discarded_tokens, 'c', 'Token', state)
+        result = self.request_input(input_string, self.wonder_great_library, discarded_tokens, 'c', 'Token', state, 'library')
         if type(result) is int:
             token = discarded_tokens[result]
             discarded_tokens.remove(token)
@@ -1105,10 +1101,10 @@ class Player:
             result(discarded_tokens, player_turn, progress_board, state)
 
     # Sub-function to request player input
-    def request_input(self, input_string, function_false, card_list, key, print_object, state):
-        # print("\n Valid moves: " + str(self.valid_moves_effect(card_list, key)) + "\n")
+    def request_input(self, input_string, function_false, card_list, key, print_object, state, function):
+        print("Valid moves: " + str(self.valid_moves_effect(card_list, key)) + "\n")
         if self.player_type == 'agent':
-            choice = self.agent.getAction(self.valid_moves_effect(card_list, key), input_string, state, 'other')
+            choice = self.agent.getAction(self.valid_moves_effect(card_list, key), input_string, state, function)
         else:
             choice = self.agent.getAction(input_string)
         if choice == '':
@@ -1176,12 +1172,12 @@ class Player:
 
     # If the token Law is in posession, allow redeeming it for a scientific symbol
     def token_law(self, progress_board, state):
-        # print("\n Valid moves: " + str(self.valid_moves_token_law()) + "\n")
+        print("Valid moves: " + str(self.valid_moves_token_law()) + "\n")
         print("Player " + str(self.player_number + 1) +
               " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
         input_string = "PLAYER " + str(self.player_number + 1) + ": "
         if self.player_type == 'agent':
-            choice = self.agent.getAction(self.valid_moves_token_law(), input_string, state, 'other')
+            choice = self.agent.getAction(self.valid_moves_token_law(), input_string, state, 'law')
         else:
             choice = self.agent.getAction(input_string)
         if choice == '':
