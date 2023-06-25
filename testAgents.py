@@ -30,6 +30,7 @@ class GreedyCivilianAgent:
         self.original_print = print
         self.print = defined_print
 
+
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string, state, function):
         if function == 'main' or function == 'mausoleum':
@@ -74,7 +75,7 @@ class GreedyCivilianAgent:
             choice = 'r' + str(science_equal_1.index(True))
         return redeem, choice
 
-    # determines the victory points of constructable cards and wonders
+    # determines the victory points of constructable cards
     def card_victory_points(self, valid_moves, state, function):
         cards_constructable = [int(move[1:]) for move in valid_moves if move[0] == 'c']
         if function == 'mausoleum': cards = state['state_variables'].discarded_cards
@@ -169,4 +170,97 @@ class GreedyCivilianAgent:
             else:
                 victory_tokens.append(0)
         return victory_tokens, tokens_constructable
+
+# A greedy agent which always chooses the action with the highest military points
+class GreedyMilitaryAgent:
+
+    def __init__(self, defined_print):
+        self.original_print = print
+        self.print = defined_print
+
+
+    # given the legal actions and information about the game state, return an action
+    def getAction(self, valid_moves, input_string, state, function):
+        if function == 'main' or function == 'mausoleum':
+            if 'r0' in valid_moves:
+                redeem, choice = self.token_law(state)
+                if redeem: return self.choose(choice, input_string)
+            military_cards, cards_constructable = self.card_military_points(valid_moves, state, function)
+            military_wonders, wonders_constructable = self.wonder_military_points(valid_moves, state)
+            max_card = max(military_cards) if sum(military_cards) > 0 else 0
+            max_wonder = max(military_wonders) if sum(military_wonders) > 0 else 0
+            if not (sum(military_cards) == 0 and sum(military_wonders) == 0):
+                if max_card > max_wonder:
+                    choice = 'c' + str(cards_constructable[military_cards.index(max(military_cards))])
+                else:
+                    wonder = wonders_constructable[military_wonders.index(max(military_wonders))]
+                    wonder_moves = [move for move in valid_moves if move[0] == 'w']
+                    wonder_moves = [move for move in wonder_moves if int(move[-1]) == wonder]
+                    choice = random.choice(wonder_moves)
+                return self.choose(choice, input_string)
+        elif function == 'token' or function == 'library':
+            victory_tokens, tokens_constructable = self.token_strategy(state, valid_moves, function)
+            if not sum(victory_tokens) == 0:
+                choice = 'c' + str(tokens_constructable[victory_tokens.index(max(victory_tokens))])
+                return self.choose(choice, input_string)
+        elif function == 'law':
+            redeem, choice = self.token_law(state)
+            if redeem: return self.choose(choice, input_string)
+        choice = random.choice(valid_moves)
+        return self.choose(choice, input_string)
+
+    def choose(self, choice, input_string):
+        self.print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
+        return choice
+
+    # choose strategy token if available otherwise random choice
+    def token_strategy(self, state, valid_moves, function):
+        tokens_constructable = [int(move[1]) for move in valid_moves]
+        if function == 'library': tokens = [token.token_name for token in state['progress_board'].discarded_tokens]
+        else: tokens = [state['progress_board'].tokens[i].token_name for i in tokens_constructable]
+        victory_tokens = []
+        for token in tokens:
+            if token == 'Strategy':
+                victory_tokens.append(5)
+            else:
+                victory_tokens.append(0)
+        return victory_tokens, tokens_constructable
+
+    # determines if the law token should be redeemed
+    def token_law(self, state):
+        tokens = [token.token_name for token in state['progress_board'].tokens if token.token_in_slot]
+        science_equal_1 = [sci == 1 for sci in state['player'].science]
+        redeem, choice = False, None
+        if 'Strategy' in tokens and any(science_equal_1):
+            redeem = True
+            choice = 'r' + str(science_equal_1.index(True))
+        return redeem, choice
+
+    # determines the military points of constructable cards
+    def card_military_points(self, valid_moves, state, function):
+        cards_constructable = [int(move[1:]) for move in valid_moves if move[0] == 'c']
+        if function == 'mausoleum': cards = state['state_variables'].discarded_cards
+        else: cards = [state['age_board'][i].card_in_slot for i in cards_constructable]
+        military_cards = []
+        for card in cards:
+            if card.card_type == 'Red':
+                military_points = int(card.card_effect_passive[0])
+                if 'Strategy' in [token.token_name for token in state['player'].progress_tokens_in_play]: military_points += 1
+                military_cards.append(military_points)
+            else:
+                military_cards.append(0)
+        return military_cards, cards_constructable
+
+    # determines the military points of constructable wonders
+    def wonder_military_points(self, valid_moves, state):
+        wonders_constructable = list(set([int(move[-1]) for move in valid_moves if move[0] == 'w']))
+        wonders = [state['player'].wonders_in_hand[i] for i in wonders_constructable]
+        military_wonders = []
+        for wonder in wonders:
+            points = 0
+            if 'M' in wonder.wonder_effect_when_played:
+                points += int(wonder.wonder_effect_when_played[-2])
+            military_wonders.append(points)
+        return military_wonders, wonders_constructable
+
 
