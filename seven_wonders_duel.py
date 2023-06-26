@@ -1341,6 +1341,12 @@ def import_agent(agent_type):
     agent_module = importlib.import_module('testAgents')
     return getattr(agent_module, agent_type) if agent_type is not None else None
 
+def print_update(wins_player1, wins_player2, draws, game_number, agent1, agent2):
+    original_print()
+    original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_number) + " (" + agent1 + ")")
+    original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_number) + " (" + agent2 + ")")
+    original_print("Draws: " + str(draws) + "/" + str(game_number))
+
 # To run the game
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1359,10 +1365,12 @@ if __name__ == "__main__":
     if supress:
         print()
         print = supress_print
+    agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(
+        args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
     for game_number in range(game_count):
         game1 = Game(game_count, [agent1_class, agent2_class])
         string_game = str(game1)
-        original_print(string_game)
+        if game_number < 100: original_print(string_game)
         if 'Player' in string_game:
             if string_game.split()[1] == "1":
                 wins_player1 += 1
@@ -1370,10 +1378,8 @@ if __name__ == "__main__":
                 wins_player2 += 1
         else:
             draws += 1
-    original_print()
-    agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
-    original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_count) + " (" + agent1 + ")")
-    original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_count) + " (" + agent2 + ")")
-    original_print("Draws: " + str(draws) + "/" + str(game_count))
+        if (game_number+1)%100 == 0:
+            print_update(wins_player1, wins_player2, draws, game_number+1, agent1, agent2)
+    # print_update(wins_player1, wins_player2, draws, game_count, agent1, agent2)
     pass
 

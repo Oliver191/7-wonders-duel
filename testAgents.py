@@ -56,7 +56,7 @@ class GreedyCivilianAgent:
         elif function == 'token' or function == 'library':
             owned_tokens = [token.token_name for token in state['player'].progress_tokens_in_play]
             token_dict = {'Philosophy':7, 'Agriculture':4, 'Mathematics':(len(owned_tokens)+1)*3}
-            victory_tokens, tokens_constructable = self.util.token_selection(state, valid_moves, function, token_dict)
+            victory_tokens, tokens_constructable = self.token_selection(state, valid_moves, function, token_dict)
             if not sum(victory_tokens) == 0:
                 choice = 'c' + str(tokens_constructable[victory_tokens.index(max(victory_tokens))])
                 return self.choose(choice, input_string)
@@ -66,6 +66,7 @@ class GreedyCivilianAgent:
         choice = random.choice(valid_moves)
         return self.choose(choice, input_string)
 
+    # print the chosen action if print not supressed
     def choose(self, choice, input_string):
         self.print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
         return choice
@@ -158,6 +159,19 @@ class GreedyCivilianAgent:
         if military_points < 0: points *= (-1)
         return abs(points - state['state_variables'].victory_points_awarded)
 
+    # chooses the specified token if available otherwise random choice
+    def token_selection(self, state, valid_moves, function, token_dict):
+        tokens_constructable = [int(move[1]) for move in valid_moves]
+        if function == 'library': tokens = [token.token_name for token in state['progress_board'].discarded_tokens]
+        else: tokens = [state['progress_board'].tokens[i].token_name for i in tokens_constructable]
+        victory_tokens = []
+        for token in tokens:
+            if token in token_dict.keys():
+                victory_tokens.append(token_dict[token])
+            else:
+                victory_tokens.append(0)
+        return victory_tokens, tokens_constructable
+
 # A greedy agent which always chooses the action with the highest military points
 class GreedyMilitaryAgent:
 
@@ -189,16 +203,15 @@ class GreedyMilitaryAgent:
                     choice = random.choice(wonder_moves)
                 return self.choose(choice, input_string)
         elif function == 'token' or function == 'library':
-            victory_tokens, tokens_constructable = self.util.token_selection(state, valid_moves, function, {'Strategy':5})
-            if not sum(victory_tokens) == 0:
-                choice = 'c' + str(tokens_constructable[victory_tokens.index(max(victory_tokens))])
-                return self.choose(choice, input_string)
+            choice = self.util.token_selection(state, valid_moves, function, ['Strategy'])
+            return self.choose(choice, input_string)
         elif function == 'law':
             redeem, choice = self.token_law(state)
             if redeem: return self.choose(choice, input_string)
         choice = random.choice(valid_moves)
         return self.choose(choice, input_string)
 
+    # print the chosen action if print not supressed
     def choose(self, choice, input_string):
         self.print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
         return choice
@@ -256,7 +269,7 @@ class GreedyScientificAgent:
             return self.choose(choice, input_string)
         elif function == 'main' or function == 'mausoleum':
             if 'r0' in valid_moves:
-                redeem, choice = self.token_law(state)
+                redeem, choice = self.util.token_law(state)
                 if redeem: return self.choose(choice, input_string)
             science_cards, cards_constructable = self.card_science_symbols(valid_moves, state, function)
             science_wonders, wonders_constructable = self.wonder_science_symbols(valid_moves, state)
@@ -272,28 +285,19 @@ class GreedyScientificAgent:
                     choice = random.choice(wonder_moves)
                 return self.choose(choice, input_string)
         elif function == 'token' or function == 'library':
-            victory_tokens, tokens_constructable = self.util.token_selection(state, valid_moves, function, {'Law':5})
-            if not sum(victory_tokens) == 0:
-                choice = 'c' + str(tokens_constructable[victory_tokens.index(max(victory_tokens))])
-                return self.choose(choice, input_string)
+            choice = self.util.token_selection(state, valid_moves, function, ['Law'])
+            return self.choose(choice, input_string)
         elif function == 'law':
-            redeem, choice = self.token_law(state)
+            redeem, choice = self.util.token_law(state)
             if redeem: return self.choose(choice, input_string)
             else: return self.choose('q', input_string)
         choice = random.choice(valid_moves)
         return self.choose(choice, input_string)
 
+    # print the chosen action if print not supressed
     def choose(self, choice, input_string):
         self.print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
         return choice
-
-    # determines if the law token should be redeemed
-    def token_law(self, state):
-        redeem, choice = False, None
-        if state['player'].science.count(0) == 1:
-            redeem = True
-            choice = 'r' + str(state['player'].science.index(0))
-        return redeem, choice
 
     # determines scientific symbols of constructable cards
     def card_science_symbols(self, valid_moves, state, function):
@@ -333,21 +337,106 @@ class GreedyScientificAgent:
             science_wonders.append(points)
         return science_wonders, wonders_constructable
 
+# An agent which bases decisions on simple rules
+class RuleBasedAgent:
+
+    def __init__(self, defined_print):
+        self.original_print = print
+        self.print = defined_print
+        self.util = AgentUtil()
+        self.wonders = ['Piraeus', 'The Appian Way', 'The Great Library', 'The Mausoleum', 'The Hanging Gardens', 'The Temple of Artemis', 'The Sphinx']
+
+    # given the legal actions and information about the game state, return an action
+    def getAction(self, valid_moves, input_string, state, function):
+        if isinstance(function, dict):
+            choice = self.util.wonder_selection(valid_moves,function,self.wonders)
+            return self.choose(choice, input_string)
+        elif function == 'main' or function == 'mausoleum':
+            if 'r0' in valid_moves:
+                redeem, choice = self.util.token_law(state)
+                if redeem: return self.choose(choice, input_string)
+            choice = self.card_selection(state, valid_moves, function)
+            return self.choose(choice, input_string)
+        elif function == 'token' or function == 'library':
+            tokens = ['Law', 'Theology', 'Economy', 'Strategy', 'Philosophy']
+            choice = self.util.token_selection(state, valid_moves, function, tokens)
+            return self.choose(choice, input_string)
+        elif function == 'law':
+            redeem, choice = self.util.token_law(state)
+            if redeem: return self.choose(choice, input_string)
+            else: return self.choose('q', input_string)
+        choice = random.choice(valid_moves)
+        return self.choose(choice, input_string)
+
+    # print the chosen action if print not supressed
+    def choose(self, choice, input_string):
+        self.print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
+        return choice
+
+    # select cards based on their color
+    def card_selection(self, state, valid_moves, function):
+        cards_constructable = [int(move[1:]) for move in valid_moves if move[0] == 'c']
+        if function == 'mausoleum': cards = state['state_variables'].discarded_cards
+        else: cards = [state['age_board'][i].card_in_slot for i in cards_constructable]
+        card_types = [card.card_type for card in cards]
+        card_prerequisites = [card.card_prerequisite for card in cards]
+        owned_cards = [card.card_name for card in state['player'].cards_in_play]
+        wonders_constructable = [move for move in valid_moves if move[0] == 'w']
+
+        if abs(state['state_variables'].military_track) >= 4 and 'Red' in card_types:
+            military_points = [int(card.card_effect_passive[0]) if card.card_type == 'Red' else 0 for card in cards]
+            return 'c' + str(cards_constructable[military_points.index(max(military_points))])
+        elif 'Green' in card_types: #construct any green cards
+            return self.green_card(state, cards, cards_constructable)
+        for prerequisite in card_prerequisites: #construct any free cards
+            if prerequisite in owned_cards:
+                return 'c' + str(cards_constructable[card_prerequisites.index(prerequisite)])
+        if 'Yellow' in card_types: #construct any yellow cards
+            return 'c' + str(cards_constructable[card_types.index('Yellow')])
+        elif wonders_constructable: #construct any wonders
+            return self.wonder_selection(state, wonders_constructable)
+        for color in ['Grey', 'Brown', 'Red']: #construct any grey, brown, or red cards
+            if color in card_types:
+                return 'c' + str(cards_constructable[card_types.index(color)])
+        return random.choice(valid_moves)
+
+    # select a scientific symbol not yet owned, otherwise select any green card
+    def green_card(self, state, cards, cards_constructable):
+        green_cards = [card for card in cards if card.card_type == 'Green']
+        for i, card in enumerate(green_cards):
+            symbol = int(card.card_effect_passive[-1]) - 1
+            if state['player'].science[symbol] == 0:
+                return 'c' + str(cards_constructable[cards.index(green_cards[i])])
+        return 'c' + str(cards_constructable[cards.index(random.choice(green_cards))])
+
+    # Select one of the specified wonders, if possible, otherwise pick a random one
+    def wonder_selection(self, state, wonders_constructable):
+        selectable = [int(move[-1]) for move in wonders_constructable]
+        wonders_selectable = [state['player'].wonders_in_hand[i].wonder_name for i in selectable]
+        for wonder in self.wonders:
+            if wonder in wonders_selectable:
+                return wonders_constructable[wonders_selectable.index(wonder)]
+        return random.choice(wonders_constructable)
+
+
 # A class summarizing useful functions shared by agents
 class AgentUtil:
 
     # chooses the specified token if available otherwise random choice
-    def token_selection(self, state, valid_moves, function, token_dict):
-        tokens_constructable = [int(move[1]) for move in valid_moves]
-        if function == 'library': tokens = [token.token_name for token in state['progress_board'].discarded_tokens]
-        else: tokens = [state['progress_board'].tokens[i].token_name for i in tokens_constructable]
-        victory_tokens = []
-        for token in tokens:
-            if token in token_dict.keys():
-                victory_tokens.append(token_dict[token])
+    def token_selection(self, state, valid_moves, function, token_list):
+        if function == 'library': selectable_tokens = [token.token_name for token in state['progress_board'].discarded_tokens]
+        else: selectable_tokens = [token.token_name if token.token_in_slot else None for token in state['progress_board'].tokens]
+        selectable = []
+        for token in token_list:
+            if token in selectable_tokens:
+                selectable.append(True)
             else:
-                victory_tokens.append(0)
-        return victory_tokens, tokens_constructable
+                selectable.append(False)
+        if any(selectable):
+            return 'c' + str(selectable_tokens.index(token_list[selectable.index(True)]))
+        else:
+            return random.choice(valid_moves)
+
 
     # chooses one of the specified wonders if it is selectable
     def wonder_selection(self, valid_moves, function, wonder_list):
@@ -362,3 +451,12 @@ class AgentUtil:
             return 'w' + str(selectable_wonders.index(wonder_list[selectable.index(True)]))
         else:
             return random.choice(valid_moves)
+
+    # determines if the law token should be redeemed
+    def token_law(self, state):
+        redeem, choice = False, None
+        if state['player'].science.count(0) == 1:
+            redeem = True
+            choice = 'r' + str(state['player'].science.index(0))
+        return redeem, choice
+
