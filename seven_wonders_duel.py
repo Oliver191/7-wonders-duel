@@ -96,7 +96,8 @@ class Game:
 
         if self.players[player].player_type == 'agent':
             self.state = self.copy_state()
-            choice = self.players[player].agent.getAction(self.valid_moves_wonder(remaining_wonders, selectable, shift), input_string, self.state, 'wonder')
+            wonder_dict = {k: v for k, v in zip(remaining_wonders, selectable[0 + shift:4 + shift])}
+            choice = self.players[player].agent.getAction(self.valid_moves_wonder(remaining_wonders, selectable, shift), input_string, self.state, wonder_dict)
         else:
             choice = self.players[player].agent.getAction(input_string)
 

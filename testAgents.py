@@ -33,7 +33,10 @@ class GreedyCivilianAgent:
 
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string, state, function):
-        if function == 'main' or function == 'mausoleum':
+        if isinstance(function, dict):
+            choice = self.util.wonder_selection(valid_moves,function,['The Pyramids', 'The Sphinx', 'The Great Lighthouse', 'The Great Library'])
+            return self.choose(choice, input_string)
+        elif function == 'main' or function == 'mausoleum':
             if 'r0' in valid_moves:
                 redeem, choice = self.token_law(state)
                 if redeem: return self.choose(choice, input_string)
@@ -165,7 +168,10 @@ class GreedyMilitaryAgent:
 
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string, state, function):
-        if function == 'main' or function == 'mausoleum':
+        if isinstance(function, dict):
+            choice = self.util.wonder_selection(valid_moves,function,['The Colossus', 'The Statue of Zeus', 'Circus Maximus'])
+            return self.choose(choice, input_string)
+        elif function == 'main' or function == 'mausoleum':
             if 'r0' in valid_moves:
                 redeem, choice = self.token_law(state)
                 if redeem: return self.choose(choice, input_string)
@@ -245,7 +251,10 @@ class GreedyScientificAgent:
 
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string, state, function):
-        if function == 'main' or function == 'mausoleum':
+        if isinstance(function, dict):
+            choice = self.util.wonder_selection(valid_moves,function,['The Great Library', 'The Mausoleum'])
+            return self.choose(choice, input_string)
+        elif function == 'main' or function == 'mausoleum':
             if 'r0' in valid_moves:
                 redeem, choice = self.token_law(state)
                 if redeem: return self.choose(choice, input_string)
@@ -339,3 +348,17 @@ class AgentUtil:
             else:
                 victory_tokens.append(0)
         return victory_tokens, tokens_constructable
+
+    # chooses one of the specified wonders if it is selectable
+    def wonder_selection(self, valid_moves, function, wonder_list):
+        selectable_wonders = [wonder.wonder_name if function[wonder] else None for wonder in function.keys()]
+        selectable = []
+        for wonder in wonder_list:
+            if wonder in selectable_wonders:
+                selectable.append(True)
+            else:
+                selectable.append(False)
+        if any(selectable):
+            return 'w' + str(selectable_wonders.index(wonder_list[selectable.index(True)]))
+        else:
+            return random.choice(valid_moves)
