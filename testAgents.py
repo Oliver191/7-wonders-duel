@@ -30,11 +30,13 @@ class GreedyCivilianAgent:
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()
+        self.random = False
 
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string, state, function):
+        self.random = False
         if isinstance(function, dict):
-            choice = self.util.wonder_selection(valid_moves,function,['The Pyramids', 'The Sphinx', 'The Great Lighthouse', 'The Great Library'])
+            choice, self.random = self.util.wonder_selection(valid_moves,function,['The Pyramids', 'The Sphinx', 'The Great Lighthouse', 'The Great Library'])
             return self.choose(choice, input_string)
         elif function == 'main' or function == 'mausoleum':
             if 'r0' in valid_moves:
@@ -64,6 +66,7 @@ class GreedyCivilianAgent:
             redeem, choice = self.token_law(state)
             if redeem: return self.choose(choice, input_string)
         choice = random.choice(valid_moves)
+        self.random = True
         return self.choose(choice, input_string)
 
     # print the chosen action if print not supressed
@@ -179,11 +182,13 @@ class GreedyMilitaryAgent:
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()
+        self.random = False
 
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string, state, function):
+        self.random = False
         if isinstance(function, dict):
-            choice = self.util.wonder_selection(valid_moves,function,['The Colossus', 'The Statue of Zeus', 'Circus Maximus'])
+            choice, self.random = self.util.wonder_selection(valid_moves,function,['The Colossus', 'The Statue of Zeus', 'Circus Maximus'])
             return self.choose(choice, input_string)
         elif function == 'main' or function == 'mausoleum':
             if 'r0' in valid_moves:
@@ -203,12 +208,13 @@ class GreedyMilitaryAgent:
                     choice = random.choice(wonder_moves)
                 return self.choose(choice, input_string)
         elif function == 'token' or function == 'library':
-            choice = self.util.token_selection(state, valid_moves, function, ['Strategy'])
+            choice, self.random = self.util.token_selection(state, valid_moves, function, ['Strategy'])
             return self.choose(choice, input_string)
         elif function == 'law':
             redeem, choice = self.token_law(state)
             if redeem: return self.choose(choice, input_string)
         choice = random.choice(valid_moves)
+        self.random = True
         return self.choose(choice, input_string)
 
     # print the chosen action if print not supressed
@@ -261,11 +267,13 @@ class GreedyScientificAgent:
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()
+        self.random = False
 
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string, state, function):
+        self.random = False
         if isinstance(function, dict):
-            choice = self.util.wonder_selection(valid_moves,function,['The Great Library', 'The Mausoleum'])
+            choice, self.random = self.util.wonder_selection(valid_moves,function,['The Great Library', 'The Mausoleum'])
             return self.choose(choice, input_string)
         elif function == 'main' or function == 'mausoleum':
             if 'r0' in valid_moves:
@@ -285,13 +293,14 @@ class GreedyScientificAgent:
                     choice = random.choice(wonder_moves)
                 return self.choose(choice, input_string)
         elif function == 'token' or function == 'library':
-            choice = self.util.token_selection(state, valid_moves, function, ['Law'])
+            choice, self.random = self.util.token_selection(state, valid_moves, function, ['Law'])
             return self.choose(choice, input_string)
         elif function == 'law':
             redeem, choice = self.util.token_law(state)
             if redeem: return self.choose(choice, input_string)
             else: return self.choose('q', input_string)
         choice = random.choice(valid_moves)
+        self.random = True
         return self.choose(choice, input_string)
 
     # print the chosen action if print not supressed
@@ -349,7 +358,7 @@ class RuleBasedAgent:
     # given the legal actions and information about the game state, return an action
     def getAction(self, valid_moves, input_string, state, function):
         if isinstance(function, dict):
-            choice = self.util.wonder_selection(valid_moves,function,self.wonders)
+            choice, _ = self.util.wonder_selection(valid_moves,function,self.wonders)
             return self.choose(choice, input_string)
         elif function == 'main' or function == 'mausoleum':
             if 'r0' in valid_moves:
@@ -359,7 +368,7 @@ class RuleBasedAgent:
             return self.choose(choice, input_string)
         elif function == 'token' or function == 'library':
             tokens = ['Law', 'Theology', 'Economy', 'Strategy', 'Philosophy']
-            choice = self.util.token_selection(state, valid_moves, function, tokens)
+            choice, _ = self.util.token_selection(state, valid_moves, function, tokens)
             return self.choose(choice, input_string)
         elif function == 'law':
             redeem, choice = self.util.token_law(state)
@@ -398,7 +407,10 @@ class RuleBasedAgent:
         for color in ['Grey', 'Brown', 'Red']: #construct any grey, brown, or red cards
             if color in card_types:
                 return 'c' + str(cards_constructable[card_types.index(color)])
-        return random.choice(valid_moves)
+        choice = random.choice(valid_moves)
+        if choice[0] == 'd':
+            choice = self.discard_card(state, valid_moves, choice)
+        return choice
 
     # select a scientific symbol not yet owned, otherwise select any green card
     def green_card(self, state, cards, cards_constructable):
@@ -418,6 +430,60 @@ class RuleBasedAgent:
                 return wonders_constructable[wonders_selectable.index(wonder)]
         return random.choice(wonders_constructable)
 
+    # pick a good card to discard
+    def discard_card(self, state, valid_moves, choice):
+        cards_discardable = [int(move[1:]) for move in valid_moves if move[0] == 'd']
+        cards = [state['age_board'][i].card_in_slot for i in cards_discardable]
+        card_types = [card.card_type for card in cards]
+        for color in ['Red', 'Blue', 'Purple', 'Green', 'Yellow']:
+            if color in card_types:
+                return 'd' + str(cards_discardable[card_types.index(color)])
+        return choice
+
+# select one of the greedy agents at random to perform the action
+class RandomGreedyAgent:
+
+    def __init__(self, defined_print):
+        self.original_print = print
+        self.print = defined_print
+        self.util = AgentUtil()
+        self.agents = [GreedyCivilianAgent(defined_print), GreedyMilitaryAgent(defined_print), GreedyScientificAgent(defined_print)]
+
+    # given the legal actions and information about the game state, return an action
+    def getAction(self, valid_moves, input_string, state, function):
+        choice = random.choice(self.agents).getAction(valid_moves, input_string, state, function)
+        return self.choose(choice, input_string)
+
+    # print the chosen action if print not supressed
+    def choose(self, choice, input_string):
+        self.print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
+        return choice
+
+# combines all three greedy agents into one
+class GreedyAgent:
+
+    def __init__(self, defined_print):
+        self.original_print = print
+        self.print = defined_print
+        self.util = AgentUtil()
+        self.agents = [GreedyCivilianAgent(defined_print), GreedyMilitaryAgent(defined_print), GreedyScientificAgent(defined_print)]
+
+    # given the legal actions and information about the game state, return an action
+    def getAction(self, valid_moves, input_string, state, function):
+        choice = self.agents[2].getAction(valid_moves, input_string, state, function)
+        if not self.agents[2].random:
+            return self.choose(choice, input_string)
+        choice = self.agents[1].getAction(valid_moves, input_string, state, function)
+        if not self.agents[1].random:
+            return self.choose(choice, input_string)
+        choice = self.agents[0].getAction(valid_moves, input_string, state, function)
+        return self.choose(choice, input_string)
+
+    # print the chosen action if print not supressed
+    def choose(self, choice, input_string):
+        self.print(input_string + str(fg.red + "Choice of Agent: " + choice + rs.all))
+        return choice
+
 
 # A class summarizing useful functions shared by agents
 class AgentUtil:
@@ -433,9 +499,9 @@ class AgentUtil:
             else:
                 selectable.append(False)
         if any(selectable):
-            return 'c' + str(selectable_tokens.index(token_list[selectable.index(True)]))
+            return 'c' + str(selectable_tokens.index(token_list[selectable.index(True)])), False
         else:
-            return random.choice(valid_moves)
+            return random.choice(valid_moves), True
 
 
     # chooses one of the specified wonders if it is selectable
@@ -448,9 +514,9 @@ class AgentUtil:
             else:
                 selectable.append(False)
         if any(selectable):
-            return 'w' + str(selectable_wonders.index(wonder_list[selectable.index(True)]))
+            return 'w' + str(selectable_wonders.index(wonder_list[selectable.index(True)])), False
         else:
-            return random.choice(valid_moves)
+            return random.choice(valid_moves), True
 
     # determines if the law token should be redeemed
     def token_law(self, state):
