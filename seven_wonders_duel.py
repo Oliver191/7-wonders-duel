@@ -5,7 +5,10 @@ from sty import fg, bg, rs
 from seven_wonders_visual import ImageDisplay
 import argparse
 import importlib
+from collections import Counter
 from testAgents import HumanAgent
+
+import time
 
 class Game:
     '''Define a single instance of a game'''
@@ -22,8 +25,9 @@ class Game:
         self.draft_wonders()
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
+        self.elapsed_time = 0.0
+        self.constructable_dict = {}
         self.request_player_input()
-
 
     def __repr__(self):
         return repr(self.outcome)
@@ -153,9 +157,13 @@ class Game:
         Returns:
             void: [description]
         """
-        print("Valid moves: " + str(self.valid_moves()) + "\n")
         player = self.state_variables.turn_player
         self.state = self.copy_state()
+        self.constructable_dict = {'cards': [card.card_name for card in self.players[player].cards_in_play],
+                                   'wonders': [wonder.wonder_name for wonder in self.players[player].wonders_in_play],
+                                   'owned_tokens': [token.token_name for token in self.players[player].progress_tokens_in_play],
+                                   'opponent_tokens': [token.token_name for token in self.players[player ^ 1].progress_tokens_in_play]}
+        print("Valid moves: " + str(self.valid_moves()) + "\n")
 
         if self.state_variables.turn_choice:
             print("")
@@ -396,69 +404,62 @@ class Game:
     # Takes 2 Player objects and 1 Card object and checks whether card is constructable given state and cost.
     def card_constructable(self, player, opponent, card, check):
         '''Checks whether a card is constructable given current player states'''
-        cost, counts = np.unique(list(card.card_cost), return_counts=True) #split string and return unique values and their counts
-        trade_cost, coins_needed, constructable = 0, 0, True
-        cards = [card.card_name for card in player.cards_in_play]
-        wonders = [wonder.wonder_name for wonder in player.wonders_in_play]
-        net_cost = ''
-        owned_tokens = [token.token_name for token in player.progress_tokens_in_play]
-        opponent_tokens = [token.token_name for token in opponent.progress_tokens_in_play]
-        if card.card_prerequisite in cards: #free construction condition
-            if 'Urbanism' in owned_tokens and not check:
+        symbol_counts = Counter(list(card.card_cost))
+        cost, counts = list(symbol_counts.keys()), list(symbol_counts.values())
+        trade_cost, coins_needed, constructable, net_cost = 0, 0, True, ''
+
+        if card.card_prerequisite in self.constructable_dict['cards']: #free construction condition
+            if 'Urbanism' in self.constructable_dict['owned_tokens'] and not check:
                 player.coins += 4
             return constructable
         # check if player has insufficient resources to construct the card
         for i, j in zip(['C', 'W', 'S', 'P', 'G'], [player.clay, player.wood, player.stone, player.paper, player.glass]):
             if i in card.card_cost:
-                resources_needed = counts[np.where(cost == i)[0]][0]
+                resources_needed = counts[cost.index(i)]
                 if resources_needed > j:
                     constructable = False
                     net_cost += i*(resources_needed - j)
-        net_cost = self.variable_production(net_cost, cards, opponent, wonders) #Handle variable production
-        if card.card_type == 'Blue' and 'Masonry' in owned_tokens:
-            net_cost = self.token_masonry_architecture(net_cost, cards, opponent)
+        net_cost = self.variable_production(net_cost, self.constructable_dict['cards'], opponent, self.constructable_dict['wonders']) #Handle variable production
+        if card.card_type == 'Blue' and 'Masonry' in self.constructable_dict['owned_tokens']:
+            net_cost = self.token_masonry_architecture(net_cost, self.constructable_dict['cards'], opponent)
         for i in list(net_cost): # calculates cost to trade for the resource
-            trade_cost += self.calculate_rate(i, cards, opponent)
+            trade_cost += self.calculate_rate(i, self.constructable_dict['cards'], opponent)
         if '$' in card.card_cost: #check if player has enough coins to construct the card
-            coins_needed = counts[np.where(cost == '$')[0]][0]
+            coins_needed = counts[cost.index('$')]
             if coins_needed > player.coins:
                 constructable = False
         if player.coins >= trade_cost + coins_needed: #trade for necessary resources to construct the card
             constructable = True
             if not check:
                 player.coins -= trade_cost
-                if 'Economy' in opponent_tokens:
+                if 'Economy' in self.constructable_dict['opponent_tokens']:
                     self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable #False if cost or materials > players coins or materials
 
     # Checks whether the wonder is constructable given state and cost.
     def wonder_constructable(self, player, opponent, position_wonder, check):
         wonder = player.wonders_in_hand[position_wonder]
-        cost, counts = np.unique(list(wonder.wonder_cost), return_counts=True)
-        trade_cost, constructable = 0, True
-        cards = [card.card_name for card in player.cards_in_play]
-        wonders = [wonder.wonder_name for wonder in player.wonders_in_play]
-        net_cost = ''
-        owned_tokens = [token.token_name for token in player.progress_tokens_in_play]
-        opponent_tokens = [token.token_name for token in opponent.progress_tokens_in_play]
+        symbol_counts = Counter(list(wonder.wonder_cost))
+        cost, counts = list(symbol_counts.keys()), list(symbol_counts.values())
+        trade_cost, constructable, net_cost = 0, True, ''
 
         # check if player has insufficient resources to construct the wonder
         for i, j in zip(['C', 'W', 'S', 'P', 'G'],[player.clay, player.wood, player.stone, player.paper, player.glass]):
             if i in wonder.wonder_cost:
-                resources_needed = counts[np.where(cost == i)[0]][0]
+                resources_needed = counts[cost.index(i)]
                 if resources_needed > j:
                     constructable = False
                     net_cost += i * (resources_needed - j)
-        net_cost = self.variable_production(net_cost, cards, opponent, wonders)  # Handle variable production
-        if 'Architecture' in owned_tokens:
-            net_cost = self.token_masonry_architecture(net_cost, cards, opponent)
+        net_cost = self.variable_production(net_cost, self.constructable_dict['cards'], opponent, self.constructable_dict['wonders'])  # Handle variable production
+        if 'Architecture' in self.constructable_dict['owned_tokens']:
+            net_cost = self.token_masonry_architecture(net_cost, self.constructable_dict['cards'], opponent)
         for i in list(net_cost): # calculates cost to trade for the resource
-            trade_cost += self.calculate_rate(i, cards, opponent)
+            trade_cost += self.calculate_rate(i, self.constructable_dict['cards'], opponent)
         if player.coins >= trade_cost: #trade for necessary resources to construct the card
             constructable = True
             if not check:
                 player.coins -= trade_cost
-                if 'Economy' in opponent_tokens:
+                if 'Economy' in self.constructable_dict['opponent_tokens']:
                     self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable
 
@@ -607,7 +608,7 @@ class Game:
     # Calculates the rate at which a resource can be bought
     def calculate_rate(self, resource, cards, opponent):
         resource_counts = [opponent.clay, opponent.wood, opponent.stone, opponent.paper, opponent.glass]
-        rate = 2 + resource_counts[np.where(np.array(['C', 'W', 'S', 'P', 'G']) == resource)[0][0]]
+        rate = 2 + resource_counts[['C', 'W', 'S', 'P', 'G'].index(resource)]
         #handle yellow cards fixing trading rates
         for name, res in zip(['Stone Reserve', 'Clay Reserve', 'Wood Reserve'], ['S', 'C', 'W']):
             if name in cards and resource == res:
@@ -942,10 +943,11 @@ class Player:
     def construct_card(self, card, player_board, opponent_board, free):
         '''Function to construct a card in a players tableau'''
         # decrease coins of player by card cost
-        cost, counts = np.unique(list(card.card_cost), return_counts=True)  # split string and return unique values and their counts
+        symbol_counts = Counter(list(card.card_cost))
+        cost, counts = list(symbol_counts.keys()), list(symbol_counts.values())
         cards = [card.card_name for card in player_board]
         if '$' in card.card_cost and card.card_prerequisite not in cards and not free: #free construction condition
-            self.coins -= counts[np.where(cost == '$')[0]][0] # decrease coins by card cost
+            self.coins -= counts[cost.index('$')] # decrease coins by card cost
         owned_tokens = [token.token_name for token in self.progress_tokens_in_play]
 
         # increase player variables by resource card effect
@@ -1349,6 +1351,7 @@ def print_update(wins_player1, wins_player2, draws, game_number, agent1, agent2)
 
 # To run the game
 if __name__ == "__main__":
+    start_time = time.time()
     parser = argparse.ArgumentParser()
     parser.add_argument("-g", "--game_count", type=int, default=1, help="Number of games")
     parser.add_argument("-a1", "--agent1_type", type=str, default=None, help="Type of Agent 1 to import")
@@ -1380,6 +1383,13 @@ if __name__ == "__main__":
             draws += 1
         if (game_number+1)%100 == 0:
             print_update(wins_player1, wins_player2, draws, game_number+1, agent1, agent2)
+    elapsed_time = time.time() - start_time
+    original_print(f"\nExecution time: {elapsed_time} seconds")
     # print_update(wins_player1, wins_player2, draws, game_count, agent1, agent2)
     pass
 
+# Code to measure execution time
+# start_time = time.time()
+#
+# self.elapsed_time += time.time() - start_time
+# original_print(f"\nExecution time: {self.elapsed_time} seconds")
