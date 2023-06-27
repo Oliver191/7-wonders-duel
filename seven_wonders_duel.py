@@ -13,16 +13,16 @@ import time
 class Game:
     '''Define a single instance of a game'''
 
-    def __init__(self, game_count=1, agent_class=[None, None]):
+    def __init__(self, game_count=1, agent_class=[None, None], csv_dict={}):
         # Create a list of lists, one list per age containing the card objects for that age:
-        self.age_boards = [Age(age) for age in range(1, 4)]
+        self.age_boards = [Age(age, csv_dict) for age in range(1, 4)]
         self.game_count = game_count
         player_type = ['human' if agent is None else 'agent' for agent in agent_class]
         self.players = [Player(0, player_type[0], agent_class[0]), Player(1, player_type[1], agent_class[1])]
         self.state_variables = StateVariables()
-        self.progress_board = ProgressBoard()
+        self.progress_board = ProgressBoard(csv_dict)
         self.outcome, self.state = None, None
-        self.draft_wonders()
+        self.draft_wonders(csv_dict)
         print("Welcome to 7 Wonders Duel - Select a Card to Play")
         self.display_game_state()
         self.elapsed_time = 0.0
@@ -44,10 +44,9 @@ class Game:
         return state
 
     #Draft wonders by selecting 8 random ones and letting players choose them in turn
-    def draft_wonders(self):
+    def draft_wonders(self, csv_dict):
         wonder_count = 8
-        wonder_list = np.genfromtxt('wonder_list.csv', delimiter=',', skip_header=1, dtype=str)
-        chosen_wonders = wonder_list[np.random.choice(wonder_list.shape[0], wonder_count, replace=False)]
+        chosen_wonders = csv_dict['wonder_list'][np.random.choice(csv_dict['wonder_list'].shape[0], wonder_count, replace=False)]
         wonders = []
         for wonder in chosen_wonders:
             wonders.append(Wonder(wonder[0], wonder[1], wonder[2], wonder[3], False))
@@ -846,9 +845,9 @@ class ProgressToken:
 class ProgressBoard:
     '''Define the progress board in which the progress tokens are slotted into'''
 
-    def __init__(self):
+    def __init__(self, csv_dict):
         self.discarded_tokens = []
-        self.tokens = self.prepare_progress_board()
+        self.tokens = self.prepare_progress_board(csv_dict)
 
     def __repr__(self):
         board = '['
@@ -862,10 +861,9 @@ class ProgressBoard:
         # return str([token if token.token_in_slot else '' for token in self.tokens])
 
     # read tokens, randomly select 5, and slot them into the board
-    def prepare_progress_board(self):
+    def prepare_progress_board(self, csv_dict):
         token_count = 5 + 3
-        token_list = np.genfromtxt('progress_tokens.csv', delimiter=',', skip_header=1, dtype=str)
-        chosen_tokens = token_list[np.random.choice(token_list.shape[0], token_count, replace=False)]
+        chosen_tokens = csv_dict['token_list'][np.random.choice(csv_dict['token_list'].shape[0], token_count, replace=False)]
         tokens = []
         for token in chosen_tokens:
             tokens.append(ProgressToken(token[0], token[1], token[2], True))
@@ -1256,23 +1254,15 @@ class StateVariables:
 
 class Age:
     '''Class to define a game age and represent the unique board layouts'''
-    
-    # Import card layout and labels for each age:
-    age_layouts = np.genfromtxt('age_layout.csv', delimiter=',', skip_header=1, dtype=str)
-    age_layouts_labels = np.genfromtxt('age_layout.csv', delimiter=',', dtype=str, max_rows=1)
-    
-    # Import full card list:
-    card_list = np.genfromtxt('card_list.csv', delimiter=',', skip_header=1, dtype=str)
-    card_list_labels = np.genfromtxt('card_list.csv', delimiter=',', dtype=str, max_rows=1)
 
     age_1_card_count = 20
     age_2_card_count = 20
     age_3_card_count = 17
     age_guild_card_count = 3
 
-    def __init__(self, age):
+    def __init__(self, age, csv_dict):
         self.age = age
-        self.card_positions = self.prepare_age_board(age)
+        self.card_positions = self.prepare_age_board(age, csv_dict)
         self.number_of_rows = int(max(self.card_positions[slot].row for slot in range(len(self.card_positions))))
 
     def __repr__(self):
@@ -1280,33 +1270,33 @@ class Age:
 
     # Init functions:
 
-    def prepare_age_board(self, age):   
+    def prepare_age_board(self, age, csv_dict):
         '''Takes dataframe of all cards and creates list of card objects representing the board for a given age.'''
         age = str(age)  # Convert to int if required
-        age_layout = self.age_layouts[np.where(self.age_layouts[:,4] == age)]  # Filter for age
-        age_cards = self.card_list[np.where(self.card_list[:,6] == age)]  # Filter for age
+        age_layout = csv_dict['age_layouts'][np.where(csv_dict['age_layouts'][:,4] == age)]  # Filter for age
+        age_cards = csv_dict['card_list'][np.where(csv_dict['card_list'][:,6] == age)]  # Filter for age
 
         if age == "1":
             age_cards = age_cards[np.random.choice(age_cards.shape[0], self.age_1_card_count, replace=False)]
         elif age == "2":
             age_cards = age_cards[np.random.choice(age_cards.shape[0], self.age_2_card_count, replace=False)]
         elif age == "3":
-            guilds_chosen = self.card_list[np.where(self.card_list[:,6] == "Guild")]
+            guilds_chosen = csv_dict['card_list'][np.where(csv_dict['card_list'][:,6] == "Guild")]
             guilds_chosen = guilds_chosen[np.random.choice(guilds_chosen.shape[0], self.age_guild_card_count, replace=False)]
             age_cards = age_cards[np.random.choice(age_cards.shape[0], self.age_3_card_count, replace=False)]
             age_cards = np.vstack((age_cards, guilds_chosen)) # Add guild cards and normal cards together
             np.random.shuffle(age_cards) # Shuffle cards together
         else:
             return
-        
+
         # Unpack age layout np.array in card slot objects
-        card_positions = [CardSlot(**dict(zip(self.age_layouts_labels, row)))
+        card_positions = [CardSlot(**dict(zip(csv_dict['age_layouts_labels'], row)))
                           for row in age_layout]
         
         # Place card objects into card slots
         for slot, _ in enumerate(card_positions):
-            card_positions[slot].card_in_slot = Card(**dict(zip(self.card_list_labels, age_cards[slot])))
-        
+            card_positions[slot].card_in_slot = Card(**dict(zip(csv_dict['card_list_labels'], age_cards[slot])))
+
         return card_positions
 
     def update_all(self):
@@ -1349,6 +1339,15 @@ def print_update(wins_player1, wins_player2, draws, game_number, agent1, agent2)
     original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_number) + " (" + agent2 + ")")
     original_print("Draws: " + str(draws) + "/" + str(game_number))
 
+def read_data():
+    csv_dict = {'age_layouts': np.genfromtxt('age_layout.csv', delimiter=',', skip_header=1, dtype=str),
+                'age_layouts_labels': np.genfromtxt('age_layout.csv', delimiter=',', dtype=str, max_rows=1),
+                'card_list': np.genfromtxt('card_list.csv', delimiter=',', skip_header=1, dtype=str),
+                'card_list_labels': np.genfromtxt('card_list.csv', delimiter=',', dtype=str, max_rows=1),
+                'token_list': np.genfromtxt('progress_tokens.csv', delimiter=',', skip_header=1, dtype=str),
+                'wonder_list': np.genfromtxt('wonder_list.csv', delimiter=',', skip_header=1, dtype=str)}
+    return csv_dict
+
 # To run the game
 if __name__ == "__main__":
     start_time = time.time()
@@ -1370,8 +1369,9 @@ if __name__ == "__main__":
         print = supress_print
     agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(
         args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
+    csv_dict = read_data()
     for game_number in range(game_count):
-        game1 = Game(game_count, [agent1_class, agent2_class])
+        game1 = Game(game_count, [agent1_class, agent2_class], csv_dict)
         string_game = str(game1)
         if game_number < 100: original_print(string_game)
         if 'Player' in string_game:
@@ -1387,6 +1387,7 @@ if __name__ == "__main__":
     original_print(f"\nExecution time: {elapsed_time} seconds")
     # print_update(wins_player1, wins_player2, draws, game_count, agent1, agent2)
     pass
+
 
 # Code to measure execution time
 # start_time = time.time()

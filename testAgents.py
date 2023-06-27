@@ -419,6 +419,10 @@ class RuleBasedAgent:
             symbol = int(card.card_effect_passive[-1]) - 1
             if state['player'].science[symbol] == 0:
                 return 'c' + str(cards_constructable[cards.index(green_cards[i])])
+        for i, card in enumerate(green_cards):
+            symbol = int(card.card_effect_passive[-1]) - 1
+            if state['player'].science[symbol] == 1:
+                return 'c' + str(cards_constructable[cards.index(green_cards[i])])
         return 'c' + str(cards_constructable[cards.index(random.choice(green_cards))])
 
     # Select one of the specified wonders, if possible, otherwise pick a random one
@@ -524,5 +528,8 @@ class AgentUtil:
         if state['player'].science.count(0) == 1:
             redeem = True
             choice = 'r' + str(state['player'].science.index(0))
+        elif state['state_variables'].current_age == 2 and state['player'].science.count(0) > 2 and state['player'].science.count(1) > 0:
+            redeem = True
+            choice = 'r' + str(state['player'].science.index(1))
         return redeem, choice
 
