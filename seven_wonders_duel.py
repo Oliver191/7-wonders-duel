@@ -13,24 +13,69 @@ import time
 class Game:
     '''Define a single instance of a game'''
 
-    def __init__(self, game_count=1, agent_class=[None, None], csv_dict={}):
-        # Create a list of lists, one list per age containing the card objects for that age:
-        self.age_boards = [Age(age, csv_dict) for age in range(1, 4)]
-        self.game_count = game_count
-        player_type = ['human' if agent is None else 'agent' for agent in agent_class]
-        self.players = [Player(0, player_type[0], agent_class[0]), Player(1, player_type[1], agent_class[1])]
-        self.state_variables = StateVariables()
-        self.progress_board = ProgressBoard(csv_dict)
-        self.outcome, self.state = None, None
-        self.draft_wonders(csv_dict)
-        print("Welcome to 7 Wonders Duel - Select a Card to Play")
-        self.display_game_state()
-        self.elapsed_time = 0.0
-        self.constructable_dict = {}
-        self.request_player_input()
+    def __init__(self, game_count, agent_class, agent_type, csv_dict):
+        self.csv_dict = csv_dict
+        self.agent1, self.player_type1 = self.initialize_agent(agent_class[0])
+        self.agent2, self.player_type2 = self.initialize_agent(agent_class[1])
+        self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
+        self.run_game(game_count, agent_type)
 
     def __repr__(self):
         return repr(self.outcome)
+
+    # initializes the agent if it is specified
+    def initialize_agent(self, agent):
+        if agent is None:
+            return HumanAgent(), 'human'
+        else:
+            return agent(print), 'agent'
+
+    # runs the game, the specified number of times
+    def run_game(self, game_count, agent_type):
+        for game_number in range(game_count):
+            self.game_number = game_number
+            self.set_game_state()
+            self.request_player_input()
+            self.update_outcome()
+            self.final()
+            if game_number < 100: original_print(self.outcome)
+            if (game_number + 1) % 100 == 0:
+                self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type[0], agent_type[1])
+
+    # Keep track of wins, losses, and draws
+    def update_outcome(self):
+        if 'Player' in self.outcome:
+            if self.outcome.split()[1] == "1":
+                self.wins_player1 += 1
+            elif self.outcome.split()[1] == "2":
+                self.wins_player2 += 1
+        else:
+            self.draws += 1
+
+    # Execute final function of agent, if it exists
+    def final(self):
+        if hasattr(self.agent1, 'final') and callable(getattr(self.agent1, 'final')):
+            self.agent1.final(self.state, self.outcome)
+        if hasattr(self.agent2, 'final') and callable(getattr(self.agent2, 'final')):
+            self.agent2.final(self.state, self.outcome)
+
+    # initializes the game
+    def set_game_state(self):
+        self.players = [Player(0, self.player_type1, self.agent1), Player(1, self.player_type2, self.agent2)]
+        self.age_boards = [Age(age, self.csv_dict) for age in range(1, 4)]
+        self.state_variables = StateVariables()
+        self.progress_board = ProgressBoard(self.csv_dict)
+        self.outcome, self.state, self.constructable_dict = None, None, {}
+        self.draft_wonders(self.csv_dict)
+        print("Welcome to 7 Wonders Duel - Select a Card to Play")
+        self.display_game_state()
+        self.elapsed_time = 0.0
+
+    def print_update(self, wins_player1, wins_player2, draws, game_number, agent1, agent2):
+        original_print()
+        original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_number) + " (" + agent1 + ")")
+        original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_number) + " (" + agent2 + ")")
+        original_print("Draws: " + str(draws) + "/" + str(game_number))
 
     #Copy all essential information of the current game state
     def copy_state(self):
@@ -874,11 +919,11 @@ class ProgressBoard:
 class Player:
     '''Define a class for play to track tableau cards, money, etc.'''
 
-    def __init__(self, player_number=0, player_type='human', agent_class=None):
+    def __init__(self, player_number=0, player_type='human', agent=None):
         # Private:
         self.player_number = player_number
         self.player_type = player_type
-        self.agent = self.initialize_player(agent_class)
+        self.agent = agent
 
         # Update as card is chosen through Game.construct_card method:
         self.coins = 7
@@ -899,13 +944,6 @@ class Player:
         self.science = [0,0,0,0,0,0]
         self.law = False
         self.replay = False
-
-    # initializes the player with the specified agent if the player_type is agent
-    def initialize_player(self, agent_class):
-        if self.player_type == 'agent':
-            return agent_class(print)
-        else:
-            return HumanAgent()
 
     def __repr__(self):
         in_hand, in_play = '[', '['
@@ -1333,12 +1371,6 @@ def import_agent(agent_type):
     agent_module = importlib.import_module('testAgents')
     return getattr(agent_module, agent_type) if agent_type is not None else None
 
-def print_update(wins_player1, wins_player2, draws, game_number, agent1, agent2):
-    original_print()
-    original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_number) + " (" + agent1 + ")")
-    original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_number) + " (" + agent2 + ")")
-    original_print("Draws: " + str(draws) + "/" + str(game_number))
-
 def read_data():
     csv_dict = {'age_layouts': np.genfromtxt('age_layout.csv', delimiter=',', skip_header=1, dtype=str),
                 'age_layouts_labels': np.genfromtxt('age_layout.csv', delimiter=',', dtype=str, max_rows=1),
@@ -1370,22 +1402,10 @@ if __name__ == "__main__":
     agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(
         args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
     csv_dict = read_data()
-    for game_number in range(game_count):
-        game1 = Game(game_count, [agent1_class, agent2_class], csv_dict)
-        string_game = str(game1)
-        if game_number < 100: original_print(string_game)
-        if 'Player' in string_game:
-            if string_game.split()[1] == "1":
-                wins_player1 += 1
-            elif string_game.split()[1] == "2":
-                wins_player2 += 1
-        else:
-            draws += 1
-        if (game_number+1)%100 == 0:
-            print_update(wins_player1, wins_player2, draws, game_number+1, agent1, agent2)
+    game1 = Game(game_count, [agent1_class, agent2_class], [agent1, agent2], csv_dict)
+
     elapsed_time = time.time() - start_time
     original_print(f"\nExecution time: {elapsed_time} seconds")
-    # print_update(wins_player1, wins_player2, draws, game_count, agent1, agent2)
     pass
 
 

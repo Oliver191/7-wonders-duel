@@ -1,6 +1,7 @@
 
 import random
 from sty import fg, bg, rs
+from ReinforcementAgents import LearningAgent
 
 # A very simple agent. Just makes a random pick every time that it is asked for an action.
 class RandomAgent:
