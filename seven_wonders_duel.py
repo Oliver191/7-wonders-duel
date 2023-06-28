@@ -15,30 +15,34 @@ class Game:
 
     def __init__(self, game_count, agent_class, agent_type, csv_dict):
         self.csv_dict = csv_dict
-        self.agent1, self.player_type1 = self.initialize_agent(agent_class[0])
-        self.agent2, self.player_type2 = self.initialize_agent(agent_class[1])
+        self.agent1, self.player_type1 = self.initialize_agent(agent_class[0], game_count[0])
+        self.agent2, self.player_type2 = self.initialize_agent(agent_class[1], game_count[0])
         self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
-        self.run_game(game_count, agent_type)
+        self.run_game(game_count[0], game_count[1], agent_type)
 
     def __repr__(self):
         return repr(self.outcome)
 
     # initializes the agent if it is specified
-    def initialize_agent(self, agent):
+    def initialize_agent(self, agent, numTraining):
         if agent is None:
             return HumanAgent(), 'human'
         else:
-            return agent(print), 'agent'
+            return agent(print, numTraining), 'agent'
 
     # runs the game, the specified number of times
-    def run_game(self, game_count, agent_type):
+    def run_game(self, numTraining, game_count, agent_type):
+        training = True
         for game_number in range(game_count):
-            self.game_number = game_number
+            self.game_number = max(0, game_number - numTraining)
             self.set_game_state()
             self.request_player_input()
             self.update_outcome()
             self.final()
-            if game_number < 100: original_print(self.outcome)
+            if self.game_number > 0 and training:
+                training = False
+                original_print("\nTraining completed!\n")
+            # if game_number < 100: original_print(self.outcome)
             if (game_number + 1) % 100 == 0:
                 self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type[0], agent_type[1])
 
@@ -55,9 +59,9 @@ class Game:
     # Execute final function of agent, if it exists
     def final(self):
         if hasattr(self.agent1, 'final') and callable(getattr(self.agent1, 'final')):
-            self.agent1.final(self.state, self.outcome)
+            self.agent1.final(self.copy_state(0), self.outcome)
         if hasattr(self.agent2, 'final') and callable(getattr(self.agent2, 'final')):
-            self.agent2.final(self.state, self.outcome)
+            self.agent2.final(self.copy_state(1), self.outcome)
 
     # initializes the game
     def set_game_state(self):
@@ -78,8 +82,7 @@ class Game:
         original_print("Draws: " + str(draws) + "/" + str(game_number))
 
     #Copy all essential information of the current game state
-    def copy_state(self):
-        player = self.state_variables.turn_player
+    def copy_state(self, player):
         state = {'age_board': self.age_boards[self.state_variables.current_age].card_positions,
                  'player': self.players[player],
                  'opponent': self.players[player ^ 1],
@@ -143,7 +146,7 @@ class Game:
         input_string = "PLAYER " + str(player + 1) + ": "+ "Select a remaining [w]onder of the " + str(count) + " available. "
 
         if self.players[player].player_type == 'agent':
-            self.state = self.copy_state()
+            self.state = self.copy_state(player)
             wonder_dict = {k: v for k, v in zip(remaining_wonders, selectable[0 + shift:4 + shift])}
             choice = self.players[player].agent.getAction(self.valid_moves_wonder(remaining_wonders, selectable, shift), input_string, self.state, wonder_dict)
         else:
@@ -202,7 +205,7 @@ class Game:
             void: [description]
         """
         player = self.state_variables.turn_player
-        self.state = self.copy_state()
+        self.state = self.copy_state(player)
         self.constructable_dict = {'cards': [card.card_name for card in self.players[player].cards_in_play],
                                    'wonders': [wonder.wonder_name for wonder in self.players[player].wonders_in_play],
                                    'owned_tokens': [token.token_name for token in self.players[player].progress_tokens_in_play],
@@ -940,7 +943,6 @@ class Player:
         self.stone = 0
         self.paper = 0
         self.glass = 0
-        self.victory_tokens = []
         self.science = [0,0,0,0,0,0]
         self.law = False
         self.replay = False
@@ -1269,6 +1271,11 @@ class StateVariables:
         self.progress_tokens_awarded = [False for i in range(6)]
         self.discarded_cards = []
 
+    def __repr__(self):
+        return str(" Age: " + repr(self.current_age)
+                   + ", Discarded Cards: " + repr(self.discarded_cards)
+                   )
+
     def change_turn_player(self):
         '''Function to change current turn player'''
         self.turn_player = self.turn_player ^ 1  # XOR operation to change 0 to 1 and 1 to 0
@@ -1384,6 +1391,7 @@ def read_data():
 if __name__ == "__main__":
     start_time = time.time()
     parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--training_count", type=int, default=0, help="Number of games during training")
     parser.add_argument("-g", "--game_count", type=int, default=1, help="Number of games")
     parser.add_argument("-a1", "--agent1_type", type=str, default=None, help="Type of Agent 1 to import")
     parser.add_argument("-a2", "--agent2_type", type=str, default=None, help="Type of Agent 2 to import")
@@ -1391,6 +1399,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     original_print = print
+    numTraining = args.training_count
     game_count = args.game_count
     agent1_class = import_agent(args.agent1_type)
     agent2_class = import_agent(args.agent2_type)
@@ -1402,7 +1411,7 @@ if __name__ == "__main__":
     agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(
         args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
     csv_dict = read_data()
-    game1 = Game(game_count, [agent1_class, agent2_class], [agent1, agent2], csv_dict)
+    game1 = Game([numTraining, game_count], [agent1_class, agent2_class], [agent1, agent2], csv_dict)
 
     elapsed_time = time.time() - start_time
     original_print(f"\nExecution time: {elapsed_time} seconds")
