@@ -19,7 +19,7 @@ class Game:
         self.agent1, self.player_type1 = self.initialize_agent(agent_class[0], game_count[0])
         self.agent2, self.player_type2 = self.initialize_agent(agent_class[1], game_count[0])
         self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
-        self.run_game(game_count[0], game_count[1], agent_type)
+        self.run_games(game_count[0], game_count[1], agent_type)
 
     def __repr__(self):
         return repr(self.outcome)
@@ -32,20 +32,25 @@ class Game:
             return agent(print, numTraining), 'agent'
 
     # runs the game, the specified number of times
-    def run_game(self, numTraining, game_count, agent_type):
-        training = True
-        for game_number in range(game_count):
-            self.game_number = max(0, game_number - numTraining)
-            self.set_game_state()
-            self.request_player_input()
-            self.update_outcome()
-            self.final()
-            if self.game_number > 0 and training:
-                training = False
-                original_print("\nTraining completed!\n")
-            # if game_number < 100: original_print(self.outcome)
+    def run_games(self, numTraining, game_count, agent_type):
+        for game_number in range(numTraining):
+            self.run()
+            if (game_number + 1) % (numTraining * 0.1) == 0:
+                self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type)
+        original_print("\nTraining completed!\n")
+        self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
+        numTesting = game_count - numTraining
+        for game_number in range(numTesting):
+            self.run()
+            if game_number < 100: original_print(self.outcome)
             if (game_number + 1) % 100 == 0:
-                self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type[0], agent_type[1])
+                self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type)
+
+    def run(self):
+        self.set_game_state()
+        self.request_player_input()
+        self.update_outcome()
+        self.final()
 
     # Keep track of wins, losses, and draws
     def update_outcome(self):
@@ -76,10 +81,10 @@ class Game:
         self.display_game_state()
         self.elapsed_time = 0.0
 
-    def print_update(self, wins_player1, wins_player2, draws, game_number, agent1, agent2):
+    def print_update(self, wins_player1, wins_player2, draws, game_number, agent_type):
         original_print()
-        original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_number) + " (" + agent1 + ")")
-        original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_number) + " (" + agent2 + ")")
+        original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_number) + " (" + agent_type[0] + ")")
+        original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_number) + " (" + agent_type[1] + ")")
         original_print("Draws: " + str(draws) + "/" + str(game_number))
 
     #Copy all essential information of the current game state
@@ -1167,7 +1172,7 @@ class Player:
             print(color + " cards of Player " + str(opponent_turn + 1) + ": " + cards)
             input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a " + color + " card of Player " + \
                            str(opponent_turn + 1) + " to discard. "
-            result = self.request_input(input_string,self.wonder_destory_card,opponent_cards, 'd', 'Card', state, 'destroy')
+            result = self.request_input(input_string,self.wonder_destory_card,opponent_cards, 'd', 'Card', state, 'destroy ' + color)
             if type(result) is int:
                 card = opponent_cards[result]
                 self.discard_card(card, opponent, discarded_cards)

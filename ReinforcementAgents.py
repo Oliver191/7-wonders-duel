@@ -12,12 +12,16 @@ class GameState:
 
     # given a state of the game, convert it to a unique key
     def convertKey(self, state, function):
-        key = str(state['progress_board'].discarded_tokens) if function == 'library' else str(function) + \
-              str(state['player']) + \
-              str(state['opponent']) + \
-              str(state['state_variables']) + \
-              str(state['progress_board']) + \
-              str(state['age_board'])
+        player = state['player']
+        key = str([player.coins, player.victory_points, player.military_points, player.science, player.clay,
+                   player.wood, player.stone, player.paper, player.glass])
+        key += str(function) if type(function) == str else 'wonders'
+        cards = []
+        for cardslot in state['age_board']:
+            if cardslot.card_in_slot is not None and cardslot.card_visible == 1:
+                cards.append(cardslot.card_in_slot.card_name)
+        cards = sorted(cards)
+        key += str(cards)
         # print('\n Key: ', key, '\n')
         return key
 
@@ -42,8 +46,8 @@ class LearningAgent:
         # Set an optimisticReward that is used to force exploration
         self.optimisticReward = 100
 
-        self.alpha = 0.1
-        self.epsilon = 0.05
+        self.alpha = 0.2
+        self.epsilon = 0.1
         self.gamma = 0.6
         self.maxAttempts = 3
         self.numTraining = numTraining
