@@ -7,6 +7,7 @@ import argparse
 import importlib
 from collections import Counter
 from testAgents import HumanAgent
+import copy
 
 import time
 
@@ -818,6 +819,16 @@ class Wonder:
                    + self.wonder_name
                    + rs.all)
 
+    def __deepcopy__(self, memo):
+        if self in memo: #check if already copied
+            return memo[self]
+        memo[self] = Wonder(wonder_name = self.wonder_name,
+                            wonder_cost = self.wonder_cost,
+                            wonder_effect_passive = self.wonder_effect_passive,
+                            wonder_effect_when_played = self.wonder_effect_when_played,
+                            wonder_in_play = self.wonder_in_play)
+        return memo[self]
+
 class Card:
     '''Define a single card. Attributes match the .csv headers'''
     colour_key = {
@@ -845,6 +856,19 @@ class Card:
         return str(self.colour_key[self.card_type]
                    + self.card_name
                    + rs.all)
+
+    def __deepcopy__(self, memo):
+        if self in memo: #check if already copied
+            return memo[self]
+        memo[self] = Card(card_name = self.card_name,
+                          card_set = self.card_set,
+                          card_type = self.card_type,
+                          card_cost = self.card_cost,
+                          card_effect_passive = self.card_effect_passive,
+                          card_effect_when_played = self.card_effect_when_played,
+                          card_age = self.card_age,
+                          card_prerequisite = self.card_prerequisite)
+        return memo[self]
 
 class CardSlot:
     '''Define a card slot on board to represent selectability, visibility, etc.'''
@@ -876,6 +900,21 @@ class CardSlot:
                    + repr(self.card_in_slot)
                    )
 
+    def __deepcopy__(self, memo):
+        if self in memo: #check if already copied
+            return memo[self]
+        new_instance = CardSlot(card_in_slot = copy.deepcopy(self.card_in_slot, memo),
+                                card_board_position = self.card_board_position,
+                                game_age = self.game_age,
+                                card_visible = self.card_visible,
+                                card_selectable = self.card_selectable,
+                                covered_by = None,
+                                row = self.row)
+        new_instance.covered_by = copy.deepcopy(self.covered_by, memo)
+
+        memo[self] = new_instance
+        return new_instance
+
 class ProgressToken:
     '''Define a single progress token'''
 
@@ -889,6 +928,15 @@ class ProgressToken:
         return str(bg(0, 70, 0) + fg.white
                    + self.token_name
                    + rs.all)
+
+    def __deepcopy__(self, memo):
+        if self in memo: #check if already copied
+            return memo[self]
+        memo[self] = ProgressToken(token_name = self.token_name,
+                                   token_effect_passive = self.token_effect_passive,
+                                   token_effect_when_played = self.token_effect_when_played,
+                                   token_in_slot = self.token_in_slot)
+        return memo[self]
 
 class ProgressBoard:
     '''Define the progress board in which the progress tokens are slotted into'''
@@ -908,8 +956,19 @@ class ProgressBoard:
         return board
         # return str([token if token.token_in_slot else '' for token in self.tokens])
 
+    def __deepcopy__(self, memo):
+        if self in memo: #check if already copied
+            return memo[self]
+        new_instance = ProgressBoard({})
+        new_instance.tokens = copy.deepcopy(self.tokens, memo)
+        new_instance.discarded_tokens = copy.deepcopy(self.discarded_tokens, memo)
+
+        memo[self] = new_instance
+        return new_instance
+
     # read tokens, randomly select 5, and slot them into the board
     def prepare_progress_board(self, csv_dict):
+        if not csv_dict: return []
         token_count = 5 + 3
         chosen_tokens = csv_dict['token_list'][np.random.choice(csv_dict['token_list'].shape[0], token_count, replace=False)]
         tokens = []
@@ -946,6 +1005,31 @@ class Player:
         self.science = [0,0,0,0,0,0]
         self.law = False
         self.replay = False
+
+    def __deepcopy__(self, memo):
+        if self in memo: #check if already copied
+            return memo[self]
+        new_instance = Player(player_number = self.player_number,
+                              player_type = self.player_type,
+                              agent = self.agent)
+        new_instance.coins = self.coins
+        new_instance.cards_in_play = copy.deepcopy(self.cards_in_play, memo)
+        new_instance.wonders_in_hand = copy.deepcopy(self.wonders_in_hand, memo)
+        new_instance.wonders_in_play = copy.deepcopy(self.wonders_in_play, memo)
+        new_instance.progress_tokens_in_play = copy.deepcopy(self.progress_tokens_in_play, memo)
+        new_instance.victory_points = self.victory_points
+        new_instance.military_points = self.military_points
+        new_instance.clay = self.clay
+        new_instance.wood = self.wood
+        new_instance.stone = self.stone
+        new_instance.paper = self.paper
+        new_instance.glass = self.glass
+        new_instance.science = self.science[:]
+        new_instance.law = self.law
+        new_instance.replay = self.replay
+
+        memo[self] = new_instance
+        return new_instance
 
     def __repr__(self):
         in_hand, in_play = '[', '['
@@ -1276,6 +1360,24 @@ class StateVariables:
                    + ", Discarded Cards: " + repr(self.discarded_cards)
                    )
 
+    def __deepcopy__(self, memo):
+        if self in memo: #check if already copied
+            return memo[self]
+        new_instance = StateVariables(turn_player = self.turn_player,
+                                      current_age = self.current_age,
+                                      military_track = self.military_track)
+        new_instance.rng = self.rng
+        new_instance.game_end = self.game_end
+        new_instance.victory_points_awarded = self.victory_points_awarded
+        new_instance.military_tokens = self.military_tokens[:]
+        new_instance.turn_choice = self.turn_choice
+        new_instance.max_card_counts = self.max_card_counts[:]
+        new_instance.progress_tokens_awarded = self.progress_tokens_awarded[:]
+        new_instance.discarded_cards = copy.deepcopy(self.discarded_cards, memo)
+
+        memo[self] = new_instance
+        return new_instance
+
     def change_turn_player(self):
         '''Function to change current turn player'''
         self.turn_player = self.turn_player ^ 1  # XOR operation to change 0 to 1 and 1 to 0
@@ -1308,15 +1410,26 @@ class Age:
     def __init__(self, age, csv_dict):
         self.age = age
         self.card_positions = self.prepare_age_board(age, csv_dict)
-        self.number_of_rows = int(max(self.card_positions[slot].row for slot in range(len(self.card_positions))))
+        self.number_of_rows = int(max(self.card_positions[slot].row for slot in range(len(self.card_positions)))) if self.card_positions else 0
 
     def __repr__(self):
         return str('Age ' + str(self.age))
+
+    def __deepcopy__(self, memo):
+        if self in memo:
+            return memo[self]
+        new_instance = Age(self.age, None)
+        new_instance.number_of_rows = self.number_of_rows
+        new_instance.card_positions = copy.deepcopy(self.card_positions, memo)
+
+        memo[self] = new_instance
+        return new_instance
 
     # Init functions:
 
     def prepare_age_board(self, age, csv_dict):
         '''Takes dataframe of all cards and creates list of card objects representing the board for a given age.'''
+        if not csv_dict: return []
         age = str(age)  # Convert to int if required
         age_layout = csv_dict['age_layouts'][np.where(csv_dict['age_layouts'][:,4] == age)]  # Filter for age
         age_cards = csv_dict['card_list'][np.where(csv_dict['card_list'][:,6] == age)]  # Filter for age

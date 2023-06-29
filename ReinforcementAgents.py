@@ -1,3 +1,4 @@
+import copy
 import random
 from sty import fg, bg, rs
 from collections import Counter
@@ -63,9 +64,9 @@ class LearningAgent:
         choice = valid_moves[utility.index(max(utility))]
 
         # Store the previous state and action
-        self.lastState = state.copy() #deep copy needed here
+        self.lastState = copy.deepcopy(state)
         self.lastAction = choice
-        self.lastFunction = function #deep copy may be needed when a dict
+        self.lastFunction = copy.deepcopy(function)
         return self.choose(choice, input_string)
 
     # Handles the end of game update
