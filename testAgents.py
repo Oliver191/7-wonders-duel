@@ -6,7 +6,7 @@ from Reinforcement3Agents import LearningAgent
 # A very simple agent. Just makes a random pick every time that it is asked for an action.
 class RandomAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.print = defined_print
 
     # given the legal actions and information about the game state, return an action
@@ -27,7 +27,7 @@ class HumanAgent:
 # A greedy agent which always chooses the action with the highest number of victory points
 class GreedyCivilianAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()
@@ -179,7 +179,7 @@ class GreedyCivilianAgent:
 # A greedy agent which always chooses the action with the highest military points
 class GreedyMilitaryAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()
@@ -264,7 +264,7 @@ class GreedyMilitaryAgent:
 # A greedy agent which always chooses science cards
 class GreedyScientificAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()
@@ -350,7 +350,7 @@ class GreedyScientificAgent:
 # An agent which bases decisions on simple rules
 class RuleBasedAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()
@@ -448,7 +448,7 @@ class RuleBasedAgent:
 # select one of the greedy agents at random to perform the action
 class RandomGreedyAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()
@@ -467,7 +467,7 @@ class RandomGreedyAgent:
 # combines all three greedy agents into one
 class GreedyAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.original_print = print
         self.print = defined_print
         self.util = AgentUtil()

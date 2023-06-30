@@ -14,10 +14,10 @@ import time
 class Game:
     '''Define a single instance of a game'''
 
-    def __init__(self, game_count, agent_class, agent_type, csv_dict):
+    def __init__(self, game_count, agent_class, agent_type, load_save_names, csv_dict):
         self.csv_dict = csv_dict
-        self.agent1, self.player_type1 = self.initialize_agent(agent_class[0], game_count[0])
-        self.agent2, self.player_type2 = self.initialize_agent(agent_class[1], game_count[0])
+        self.agent1, self.player_type1 = self.initialize_agent(agent_class[0], load_save_names[0], game_count[0])
+        self.agent2, self.player_type2 = self.initialize_agent(agent_class[1], load_save_names[1], game_count[0])
         self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
         self.run_games(game_count[0], game_count[1], agent_type)
 
@@ -25,11 +25,11 @@ class Game:
         return repr(self.outcome)
 
     # initializes the agent if it is specified
-    def initialize_agent(self, agent, numTraining):
+    def initialize_agent(self, agent, load_save_names, numTraining):
         if agent is None:
             return HumanAgent(), 'human'
         else:
-            return agent(print, numTraining), 'agent'
+            return agent(print, numTraining, load_save_names), 'agent'
 
     # runs the game, the specified number of times
     def run_games(self, numTraining, game_count, agent_type):
@@ -1513,6 +1513,10 @@ if __name__ == "__main__":
     parser.add_argument("-g", "--game_count", type=int, default=1, help="Number of games")
     parser.add_argument("-a1", "--agent1_type", type=str, default=None, help="Type of Agent 1 to import")
     parser.add_argument("-a2", "--agent2_type", type=str, default=None, help="Type of Agent 2 to import")
+    parser.add_argument("-l1", "--load_agent1", type=str, default=None, help="Name of Agent 1 to load")
+    parser.add_argument("-l2", "--load_agent2", type=str, default=None, help="Name of Agent 2 to load")
+    parser.add_argument("-s1", "--save_agent1", type=str, default=None, help="Name of Agent 1 to save")
+    parser.add_argument("-s2", "--save_agent2", type=str, default=None, help="Name of Agent 2 to save")
     parser.add_argument("-s", "--supress", type=str, default='False', help="Game state not printed when True")
     args = parser.parse_args()
 
@@ -1521,6 +1525,9 @@ if __name__ == "__main__":
     game_count = args.game_count
     agent1_class = import_agent(args.agent1_type)
     agent2_class = import_agent(args.agent2_type)
+    load_name1, save_name1 = args.load_agent1, args.save_agent1
+    load_name2, save_name2 = args.load_agent2, args.save_agent2
+    load_save_names = [[load_name1, save_name1], [load_name2, save_name2]]
     supress = True if args.supress == 'True' else False
     wins_player1, wins_player2, draws = 0, 0, 0
     if supress:
@@ -1529,7 +1536,7 @@ if __name__ == "__main__":
     agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(
         args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
     csv_dict = read_data()
-    game1 = Game([numTraining, game_count], [agent1_class, agent2_class], [agent1, agent2], csv_dict)
+    game1 = Game([numTraining, game_count], [agent1_class, agent2_class], [agent1, agent2], load_save_names, csv_dict)
 
     elapsed_time = time.time() - start_time
     original_print(f"\nExecution time: {elapsed_time} seconds")

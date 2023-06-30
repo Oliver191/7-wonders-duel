@@ -17,6 +17,13 @@ class GameState:
         # key += str([player.coins, player.victory_points, player.military_points, player.science, player.clay,
         #            player.wood, player.stone, player.paper, player.glass])
         # print('\n Key: ', key, '\n')
+
+        # key = 'Victory: '+ str((player.victory_points + player.coins // 3) - (opponent.victory_points + opponent.coins // 3))
+        # key += ', Military: ' + str(player.military_points - opponent.military_points)
+        # key += ', Science: ' + str([True if symbol > 0 else False for symbol in player.science])
+        # yellow = len([1 for card in player.cards_in_play if card.card_type == 'Yellow'])
+        # key += ', Resources: ' + str(sum([player.clay, player.wood, player.stone, player.paper, player.glass])+yellow)
+
         return key
 
     def convertFunction(self, state, function):
@@ -53,7 +60,7 @@ class GameState:
 
 class LearningAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.original_print = print
         self.print = defined_print
         self.lastState, self.lastAction, self.lastFunction = None, None, None

@@ -2,6 +2,7 @@ import copy
 import random
 from sty import fg, bg, rs
 from collections import Counter
+import pickle
 
 class GameState:
     '''Wrapper class to extract useful information from game state'''
@@ -12,63 +13,53 @@ class GameState:
 
     # given a state of the game, convert it to a unique key
     def convertKey(self, state, function):
-        key = self.convertFunction(state, function)
-        # player = state['player']
-        # key += str([player.coins, player.victory_points, player.military_points, player.science, player.clay,
-        #            player.wood, player.stone, player.paper, player.glass])
+        player = state['player']
+        opponent = state['opponent']
+        victory = (player.victory_points + player.coins // 3) - (opponent.victory_points + opponent.coins // 3)
+        key = 'Victory: ' + str(True if victory > 0 else False)
+        military = [True if (player.military_points - opponent.military_points) < thres else False for thres in [-8, -5, -2, 0]]
+        military += [True if (player.military_points - opponent.military_points) > thres else False for thres in [0, 2, 5, 8]]
+        key += ', Military: ' + str(military)
+        key += ', Science: ' + str([True if symbol > 0 else False for symbol in player.science])
+        yellow = len([1 for card in player.cards_in_play if card.card_type == 'Yellow'])
+        key += ', Resources: ' + str(sum([player.clay, player.wood, player.stone, player.paper, player.glass])+yellow)
         # print('\n Key: ', key, '\n')
         return key
 
-    def convertFunction(self, state, function):
-        if isinstance(function, dict):
-            return '' # str(sorted([wonder.wonder_name for wonder in function.keys() if function[wonder]]))
-        elif function == 'main':
-            cards = []
-            for cardslot in state['age_board']:
-                if cardslot.card_in_slot is not None and cardslot.card_selectable == 1: #cardslot.card_visible == 1:
-                    cards.append(cardslot.card_in_slot.card_name)
-            cards += [wonder.wonder_name for wonder in state['player'].wonders_in_hand if not wonder.wonder_in_play]
-            return '' # str(sorted(cards))
-        elif function == 'mausoleum':
-            return '' # str(sorted([card.card_name for card in state['state_variables'].discarded_cards]))
-        elif function == 'token':
-            return '' # str(sorted([token.token_name for token in state['progress_board'].tokens if token.token_in_slot]))
-        elif function == 'library':
-            return '' # str(sorted([token.token_name for token in  state['progress_board'].discarded_tokens]))
-        elif function == 'law':
-            return '' # str(state['player'].science)
-        elif 'destroy' in function.split():
-            return ''
-        else:
-            return function
-
     # computes the score of the state based on victory points and coins
     def getScore(self):
-        score = self.state['player'].victory_points + \
-                self.state['player'].military_points - self.state['opponent'].military_points + \
-                self.state['player'].coins // 3 + \
-                self.state['player'].clay + self.state['player'].wood + self.state['player'].stone + \
-                self.state['player'].paper + self.state['player'].glass + sum(self.state['player'].science)*2
-        return score
+        score = []
+        for play in ['player', 'opponent']:
+            score.append(self.state[play].victory_points +
+                         self.state[play].military_points +
+                         self.state[play].coins // 3 +
+                         self.state[play].clay + self.state[play].wood + self.state[play].stone +
+                         self.state[play].paper + self.state[play].glass + sum(self.state[play].science)*2 +
+                         len([1 for card in self.state[play].cards_in_play if card.card_type == 'Yellow']))
+        return score[0]
 
 class LearningAgent:
 
-    def __init__(self, defined_print, numTraining):
+    def __init__(self, defined_print, numTraining, load_save_names):
         self.original_print = print
         self.print = defined_print
         self.lastState, self.lastAction, self.lastFunction, self.lastValidMoves = None, None, None, []
         self.episodes = 0
-        self.qValue = Counter()
-        self.actionFrequency = Counter()
+        self.load_name, self.save_name = load_save_names
+        if self.load_name is None:
+            self.qValue, self.actionFrequency = Counter(), Counter()
+        else:
+            self.qValue, self.actionFrequency = self.load_agent(self.load_name)
+
         # Set an optimisticReward that is used to force exploration
         self.optimisticReward = 100
         self.episodeHistory = []
 
-        self.alpha = 0.2
-        self.epsilon = 0.1
-        self.gamma = 0.6
-        # self.maxAttempts = 10
-        self.maxAttempts = 100
+        self.alpha = 0.2 if numTraining > 0 else 0.0
+        self.epsilon = 0.1 if numTraining > 0 else 0.0
+        self.gamma = 0.6 if numTraining > 0 else 0.0
+        self.maxAttempts = 20 if numTraining > 0 else 0
+        # self.maxAttempts = 100
         self.numTraining = numTraining
 
     # given the legal actions and information about the game state, return an action
@@ -100,20 +91,17 @@ class LearningAgent:
     def final(self, state, outcome):
         if 'Player' in outcome:
             if state['player'].player_number + 1 == int(outcome.split()[1]):
-                reward, function = 100, 'win'
+                reward, function = 50, 'win'
             else:
-                reward, function = -100, 'loss'
+                reward, function = -10, 'loss'
         else:
             reward, function = 10, 'draw'
         self.episodeHistory.append((state, None, function, []))
 
         startState = GameState(self.lastState, self.lastFunction)
         lastActionName = self.convertActionName(self.lastState, self.lastAction, self.lastFunction)
-        # endState = GameState(state, function)
-        # self.learn(startState, lastActionName, reward, endState, [], function)
         self.updateQValues(reward)
         self.actionFrequency[(startState.key, lastActionName)] += 1
-
 
         #reset values
         self.episodeHistory = []
@@ -122,9 +110,32 @@ class LearningAgent:
         # set learning parameters to zero after training is done
         self.episodes += 1
         if self.episodes == self.numTraining:
-            self.alpha = 0.0
-            self.epsilon = 0.0
-            self.maxAttempts = 0
+            self.alpha, self.epsilon, self.gamma, self.maxAttempts = 0.0, 0.0, 0.0, 0
+            self.original_print('\n', len(self.actionFrequency), '\n', list(self.actionFrequency.items())[:500],'\n')
+            self.original_print('\n', len(self.qValue), '\n', list(self.qValue.items())[:500], '\n')
+            if self.save_name is not None: self.save_agent(self.qValue, self.actionFrequency, self.save_name)
+
+    def save_agent(self, qValue, actionFrequency, name):
+        file_path = f'saved_agents/{name}_qValue.pkl'
+        with open(file_path, 'wb') as file:
+            pickle.dump(qValue, file)
+        file_path = f'saved_agents/{name}_actionFrequency.pkl'
+        with open(file_path, 'wb') as file:
+            pickle.dump(actionFrequency, file)
+
+    def load_agent(self, name):
+        try:
+            file_path = f'saved_agents/{name}_qValue.pkl'
+            with open(file_path, 'rb') as file:
+                qValue = pickle.load(file)
+            file_path = f'saved_agents/{name}_actionFrequency.pkl'
+            with open(file_path, 'rb') as file:
+                actionFrequency = pickle.load(file)
+            qValue = Counter(qValue)
+            actionFrequency = Counter(actionFrequency)
+            return qValue, actionFrequency
+        except FileNotFoundError:
+            return Counter(), Counter()
 
     def updateQValues(self, reward):
         # Iterate over the episode history in reverse order
@@ -140,7 +151,7 @@ class LearningAgent:
             # Update Q-value if there is a previous state
             if startState is not None and action is not None:
                 lastActionName = self.convertActionName(lastState, lastAction, lastFunction)
-                discounted_reward = reward * 0.9**discount
+                discounted_reward = reward #'* 0.9**discount
                 self.learn(startState, lastActionName, discounted_reward, endState, valid_moves, function)
                 discount += 1
 
@@ -151,7 +162,8 @@ class LearningAgent:
             if action[0] == 'c':
                 actionName = 'construct ' + state['age_board'][int(action[1:])].card_in_slot.card_name
             elif action[0] == 'd':
-                actionName = 'discard ' + state['age_board'][int(action[1:])].card_in_slot.card_name
+                # actionName = 'discard ' + state['age_board'][int(action[1:])].card_in_slot.card_name
+                actionName = 'discard ' + state['age_board'][int(action[1:])].card_in_slot.card_type
             elif action[0] == 'w':
                 actionName = 'construct ' + state['player'].wonders_in_hand[int(action[-1])].wonder_name
                 # actionName += ', discard ' + state['age_board'][int(action.split()[0][1:])].card_in_slot.card_name
@@ -166,7 +178,9 @@ class LearningAgent:
         elif function == 'law':
             actionName = action
         elif 'destroy' in function.split():
-            opponent_cards = [card.card_name for card in state['opponent'].cards_in_play if card.card_type == function.split()[1]]
+            # opponent_cards = [card.card_name for card in state['opponent'].cards_in_play if card.card_type == function.split()[1]]
+            # actionName = 'destroy ' + opponent_cards[int(action[1:])]
+            opponent_cards = [card.card_effect_passive for card in state['opponent'].cards_in_play if card.card_type == function.split()[1]]
             actionName = 'destroy ' + opponent_cards[int(action[1:])]
         return actionName
 
