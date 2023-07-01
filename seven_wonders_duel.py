@@ -14,8 +14,9 @@ import time
 class Game:
     '''Define a single instance of a game'''
 
-    def __init__(self, game_count, agent_class, agent_type, load_save_names, csv_dict):
+    def __init__(self, game_count, agent_class, agent_type, load_save_names, csv_dict, hyperparams):
         self.csv_dict = csv_dict
+        self.hyperparams = hyperparams
         self.agent1, self.player_type1 = self.initialize_agent(agent_class[0], load_save_names[0], game_count[0])
         self.agent2, self.player_type2 = self.initialize_agent(agent_class[1], load_save_names[1], game_count[0])
         self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
@@ -29,21 +30,23 @@ class Game:
         if agent is None:
             return HumanAgent(), 'human'
         else:
-            return agent(print, numTraining, load_save_names), 'agent'
+            return agent(print, numTraining, load_save_names, self.hyperparams), 'agent'
 
     # runs the game, the specified number of times
     def run_games(self, numTraining, game_count, agent_type):
         for game_number in range(numTraining):
             self.run()
-            if (game_number + 1) % (numTraining * 0.1) == 0:
+        #     if (game_number + 1) % (numTraining * 0.1) == 0:
+        #         self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type)
+            if (game_number + 1) % (numTraining * 0.5) == 0:
                 self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type)
-        original_print("\nTraining completed!\n")
+        # original_print("\nTraining completed!\n")
         self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
         numTesting = game_count - numTraining
         for game_number in range(numTesting):
             self.run()
-            if game_number < 100: original_print(self.outcome)
-            if (game_number + 1) % 100 == 0:
+            # if game_number < 100: original_print(self.outcome)
+            if (game_number + 1) % 1000 == 0:
                 self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type)
 
     def run(self):
@@ -83,6 +86,7 @@ class Game:
 
     def print_update(self, wins_player1, wins_player2, draws, game_number, agent_type):
         original_print()
+        if self.hyperparams[0] is not None: original_print('[Alpha, Epsilon, Gamma, maxAttempts] = ' + str(self.hyperparams))
         original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_number) + " (" + agent_type[0] + ")")
         original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_number) + " (" + agent_type[1] + ")")
         original_print("Draws: " + str(draws) + "/" + str(game_number))
@@ -1517,6 +1521,10 @@ if __name__ == "__main__":
     parser.add_argument("-l2", "--load_agent2", type=str, default=None, help="Name of Agent 2 to load")
     parser.add_argument("-s1", "--save_agent1", type=str, default=None, help="Name of Agent 1 to save")
     parser.add_argument("-s2", "--save_agent2", type=str, default=None, help="Name of Agent 2 to save")
+    parser.add_argument("-alp", "--alpha", type=float, default=False, help="Alpha hyperparameter")
+    parser.add_argument("-eps", "--epsilon", type=float, default=False, help="Epsilon hyperparameter")
+    parser.add_argument("-gam", "--gamma", type=float, default=False, help="Gamma hyperparameter")
+    parser.add_argument("-mA", "--maxAttempts", type=int, default=False, help="maxAttempts hyperparameter")
     parser.add_argument("-s", "--supress", type=str, default='False', help="Game state not printed when True")
     args = parser.parse_args()
 
@@ -1528,6 +1536,7 @@ if __name__ == "__main__":
     load_name1, save_name1 = args.load_agent1, args.save_agent1
     load_name2, save_name2 = args.load_agent2, args.save_agent2
     load_save_names = [[load_name1, save_name1], [load_name2, save_name2]]
+    hyperparams = [args.alpha,args.epsilon, args.gamma, args.maxAttempts]
     supress = True if args.supress == 'True' else False
     wins_player1, wins_player2, draws = 0, 0, 0
     if supress:
@@ -1536,7 +1545,7 @@ if __name__ == "__main__":
     agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(
         args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
     csv_dict = read_data()
-    game1 = Game([numTraining, game_count], [agent1_class, agent2_class], [agent1, agent2], load_save_names, csv_dict)
+    game1 = Game([numTraining, game_count], [agent1_class, agent2_class], [agent1, agent2], load_save_names, csv_dict, hyperparams)
 
     elapsed_time = time.time() - start_time
     original_print(f"\nExecution time: {elapsed_time} seconds")
