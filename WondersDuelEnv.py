@@ -3,197 +3,267 @@ import numpy as np
 from numpy.random import default_rng
 from sty import fg, bg, rs
 from seven_wonders_visual import ImageDisplay
-import argparse
-import importlib
 from collections import Counter
-from testAgents import HumanAgent
 import copy
 
-import time
+from gymnasium import Env
+import gymnasium.spaces as spaces
 
-class Game:
-    '''Define a single instance of a game'''
+class WondersEnv(Env):
+    """Custom Environment that follows the Gym interface."""
 
-    def __init__(self, game_count, agent_class, agent_type, load_save_names, csv_dict, hyperparams):
-        self.csv_dict = csv_dict
-        self.hyperparams = hyperparams
-        self.agent1, self.player_type1 = self.initialize_agent(agent_class[0], load_save_names[0], game_count[0])
-        self.agent2, self.player_type2 = self.initialize_agent(agent_class[1], load_save_names[1], game_count[0])
-        self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
-        self.run_games(game_count[0], game_count[1], agent_type)
+    metadata = {"render.modes": ["human"]}
+
+    def __init__(self):
+        super(WondersEnv, self).__init__()
+
+        self.csv_dict = self.read_data()
+        self.name_mapping = self.map_name_int()
+        self.action_space = spaces.Discrete(4)
+        self.observation_space = spaces.Dict({'age_board': spaces.Box(low=0, high=np.inf, shape=(26,), dtype=int), #2,13
+                                              'player': spaces.Box(low=0, high=np.inf, shape=(15,), dtype=int),
+                                              'player_cards': spaces.Box(low=0, high=np.inf, shape=(120,), dtype=int), #4,30
+                                              'opponent': spaces.Box(low=0, high=np.inf, shape=(15,), dtype=int),
+                                              'opponent_cards': spaces.Box(low=0, high=np.inf, shape=(120,), dtype=int), #4,30
+                                              'state_variables': spaces.Box(low=0, high=np.inf, shape=(3,), dtype=int),
+                                              'progress_board': spaces.Box(low=0, high=np.inf, shape=(10,), dtype=int), #2,5
+                                             })
+        self.display = False
+        self.perform_check = False
 
     def __repr__(self):
         return repr(self.outcome)
 
-    # initializes the agent if it is specified
-    def initialize_agent(self, agent, load_save_names, numTraining):
-        if agent is None:
-            return HumanAgent(), 'human'
-        else:
-            return agent(print, numTraining, load_save_names, self.hyperparams), 'agent'
+    def step(self, action):
+        action = self.convertAction(action)
+        player = self.state_variables.turn_player
+        opponent = player ^ 1
+        discarded_cards = self.state_variables.discarded_cards
+        if self.mode == 'wonders':
+            self.draft_wonders(action)
+        elif self.mode == 'main':
+            self.select_action(action)
+        elif self.mode == 'token':
+            self.select_token(action)
+        elif self.mode == 'law':
+            self.players[player].token_law(action, self.progress_board, self.display)
+            self.mode = 'main'
+            self.check_progress_tokens(player)
+        elif self.mode in ['Circus Maximus', 'The Statue of Zeus']:
+            color = 'Grey' if self.mode == 'Circus Maximus' else 'Brown'
+            wonder_name = 'Circus Maximus' if self.mode == 'Circus Maximus' else 'The Statue of Zeus'
+            self.players[player].wonder_destory_card(action, self.players[opponent], color, player,
+                                                     discarded_cards, wonder_name, self.display)
+            self.mode = 'main'
+        elif self.mode == 'The Mausoleum':
+            self.players[player].wonder_mausoleum(action, discarded_cards, self.players[player].cards_in_play,
+                                                  self.players[opponent].cards_in_play, self.display)
+            self.mode = 'main'
+            self.check_progress_tokens(player)
+        elif self.mode == 'The Great Library':
+            self.players[player].wonder_great_library(action, self.progress_board.discarded_tokens, self.display)
+            self.mode = 'main'
+            if self.players[player].law: self.mode = 'law'
 
-    # runs the game, the specified number of times
-    def run_games(self, numTraining, game_count, agent_type):
-        for game_number in range(numTraining):
-            self.run()
-        #     if (game_number + 1) % (numTraining * 0.1) == 0:
-        #         self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type)
-            if (game_number + 1) % (numTraining * 0.5) == 0:
-                self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type)
-        # original_print("\nTraining completed!\n")
-        self.wins_player1, self.wins_player2, self.draws = 0, 0, 0
-        numTesting = game_count - numTraining
-        for game_number in range(numTesting):
-            self.run()
-            # if game_number < 100: original_print(self.outcome)
-            if (game_number + 1) % 1000 == 0:
-                self.print_update(self.wins_player1, self.wins_player2, self.draws, game_number + 1, agent_type)
+        if self.perform_check and self.mode == 'main':
+            self.perform_checks()
+            self.perform_check = False
 
-    def run(self):
-        self.set_game_state()
-        self.request_player_input()
-        self.update_outcome()
-        self.final()
+        self.get_observation()
+        self.get_reward()
+        if not self.done: self.update_action_space(len(self.valid_moves()))
+        return self.state, self.reward, self.done, False, {}
 
-    # Keep track of wins, losses, and draws
-    def update_outcome(self):
-        if 'Player' in self.outcome:
-            if self.outcome.split()[1] == "1":
-                self.wins_player1 += 1
-            elif self.outcome.split()[1] == "2":
-                self.wins_player2 += 1
-        else:
-            self.draws += 1
-
-    # Execute final function of agent, if it exists
-    def final(self):
-        if hasattr(self.agent1, 'final') and callable(getattr(self.agent1, 'final')):
-            self.agent1.final(self.copy_state(0), self.outcome)
-        if hasattr(self.agent2, 'final') and callable(getattr(self.agent2, 'final')):
-            self.agent2.final(self.copy_state(1), self.outcome)
-
-    # initializes the game
-    def set_game_state(self):
-        self.players = [Player(0, self.player_type1, self.agent1), Player(1, self.player_type2, self.agent2)]
+    def reset(self, seed=None, options=None):
+        self.done = False
+        self.players = [Player(0, 'human', None), Player(1, 'human', None)]
         self.age_boards = [Age(age, self.csv_dict) for age in range(1, 4)]
         self.state_variables = StateVariables()
         self.progress_board = ProgressBoard(self.csv_dict)
         self.outcome, self.state, self.constructable_dict = None, None, {}
-        self.draft_wonders(self.csv_dict)
-        print("Welcome to 7 Wonders Duel - Select a Card to Play")
-        self.display_game_state()
-        self.elapsed_time = 0.0
+        self.mode, self.reward = 'wonders', 0
+        self.wonders, self.wonders_selectable = self.set_wonders()
+        self.display_wonders()
+        self.get_observation()
+        return self.state, {}
 
-    def print_update(self, wins_player1, wins_player2, draws, game_number, agent_type):
-        original_print()
-        if self.hyperparams[0] is not None: original_print('[Alpha, Epsilon, Gamma, maxAttempts] = ' + str(self.hyperparams))
-        original_print("Wins Player 1: " + str(wins_player1) + "/" + str(game_number) + " (" + agent_type[0] + ")")
-        original_print("Wins Player 2: " + str(wins_player2) + "/" + str(game_number) + " (" + agent_type[1] + ")")
-        original_print("Draws: " + str(draws) + "/" + str(game_number))
+    def render(self):
+        self.display = True
 
-    #Copy all essential information of the current game state
-    def copy_state(self, player):
-        state = {'age_board': self.age_boards[self.state_variables.current_age].card_positions,
-                 'player': self.players[player],
-                 'opponent': self.players[player ^ 1],
-                 'state_variables': self.state_variables,
-                 'progress_board': self.progress_board
-                 }
-        return state
+    def read_data(self):
+        csv_dict = {'age_layouts': np.genfromtxt('age_layout.csv', delimiter=',', skip_header=1, dtype=str),
+                    'age_layouts_labels': np.genfromtxt('age_layout.csv', delimiter=',', dtype=str, max_rows=1),
+                    'card_list': np.genfromtxt('card_list.csv', delimiter=',', skip_header=1, dtype=str),
+                    'card_list_labels': np.genfromtxt('card_list.csv', delimiter=',', dtype=str, max_rows=1),
+                    'token_list': np.genfromtxt('progress_tokens.csv', delimiter=',', skip_header=1, dtype=str),
+                    'wonder_list': np.genfromtxt('wonder_list.csv', delimiter=',', skip_header=1, dtype=str)}
+        return csv_dict
 
-    #Draft wonders by selecting 8 random ones and letting players choose them in turn
-    def draft_wonders(self, csv_dict):
+    def map_name_int(self):
+        name_list = list(self.csv_dict['card_list'][:, 0])
+        name_list += list(self.csv_dict['wonder_list'][:, 0])
+        name_list += list(self.csv_dict['token_list'][:, 0])
+        mapping = {}
+        for i, name in enumerate(name_list):
+            mapping[name] = i+1
+        return mapping
+
+    def convertAction(self, action): #TODO account for show functionality
+        if self.display:
+            print(str(fg.red + "Choice: " + self.valid_moves()[action] + rs.all))
+        return self.valid_moves()[action]
+
+    def update_action_space(self, num_actions):
+        self.action_space = spaces.Discrete(num_actions)
+
+    def get_reward(self):
+        if self.done:
+            if 'Player' in self.outcome:
+                if self.outcome.split()[1] == "1":
+                    self.reward = 100 if self.state_variables.turn_player == 0 else -100
+                elif self.outcome.split()[1] == "2":
+                    self.reward = 100 if self.state_variables.turn_player == 1 else -50
+            else:
+                self.reward = 10
+        else:
+            self.reward = 0 #TODO maybe define a reward for each step (see getScore of Learning agent)
+
+    def get_observation(self):
+        player = self.state_variables.turn_player
+        player_attributes, player_cards = self.convert_player(self.players[player])
+        opponent_attributes, opponent_cards = self.convert_player(self.players[player^1])
+        self.state = {'age_board': self.convert_age_board(),
+                      'player': player_attributes,
+                      'player_cards': player_cards,
+                      'opponent': opponent_attributes,
+                      'opponent_cards': opponent_cards,
+                      'state_variables': self.convert_state_variables(),
+                      'progress_board': self.convert_progress_board()
+                     }
+        self.constructable_dict = {'cards': [card.card_name for card in self.players[player].cards_in_play],
+                                   'wonders': [wonder.wonder_name for wonder in self.players[player].wonders_in_play],
+                                   'owned_tokens': [token.token_name for token in self.players[player].progress_tokens_in_play],
+                                   'opponent_tokens': [token.token_name for token in self.players[player ^ 1].progress_tokens_in_play]}
+
+    def convert_to_np(self, *arrays, max_len=None):
+        lengths = [len(arr) for arr in arrays]
+        if max_len is None: max_len = max(lengths)
+        result = np.zeros((len(arrays), max_len), dtype=int)
+        for i, arr in enumerate(arrays):
+            result[i, :lengths[i]] = np.array(arr, dtype=int)
+        return result
+
+    def convert_age_board(self):
+        cardSlots = self.age_boards[self.state_variables.current_age].card_positions
+        shift = 0 if any(self.wonders_selectable[:4]) else 4
+        cards = [self.name_mapping[cardSlot.card_in_slot.card_name] for cardSlot in cardSlots if cardSlot.card_visible == 1 and cardSlot.card_in_slot is not None]
+        wonders = [self.name_mapping[wonder.wonder_name] for i, wonder in enumerate(self.wonders[0+shift:4+shift]) if self.wonders_selectable[0+shift:4+shift][i]]
+        return self.convert_to_np(cards, wonders, max_len=13).flatten()
+
+    def convert_player(self, custom_class):
+        class_dict = {}
+        for attr_name, attr_value in vars(custom_class).items():
+            if attr_name not in ['player_type', 'agent', 'law', 'replay', 'wonder_effects', 'science']:
+                class_dict[attr_name] = attr_value
+        cards_in_play = [self.name_mapping[card.card_name] for card in class_dict['cards_in_play']]
+        wonders_in_hand = [self.name_mapping[wonder.wonder_name] for wonder in class_dict['wonders_in_hand'] if not wonder.wonder_in_play]
+        wonders_in_play = [self.name_mapping[wonder.wonder_name] for wonder in class_dict['wonders_in_play']]
+        progress_tokens_in_play = [self.name_mapping[token.token_name] for token in class_dict['progress_tokens_in_play']]
+        player_cards = self.convert_to_np(cards_in_play, wonders_in_hand, wonders_in_play, progress_tokens_in_play, max_len=30) # size 4
+        for name in ['cards_in_play', 'wonders_in_hand', 'wonders_in_play', 'progress_tokens_in_play']:
+            del class_dict[name]
+        player_attributes = np.array(list(class_dict.values()) + custom_class.science, dtype=int) # size 15
+        return player_attributes, player_cards.flatten()
+
+    def convert_state_variables(self):
+        list1 = [self.state_variables.turn_player]
+        list2 = [self.state_variables.current_age]
+        list3 = [1 if self.state_variables.turn_choice else 0]
+        # discarded_cards = [0]
+        # if self.mode == 'The Mausoleum':
+        #     discarded_cards = [self.name_mapping[card.card_name] for card in self.state_variables.discarded_cards]
+        # return self.convert_to_np(list1, list2, list3, discarded_cards)
+        return np.array(list1+list2+list3, dtype=int)
+
+    def convert_progress_board(self):
+        tokens = [self.name_mapping[token.token_name] for token in self.progress_board.tokens if token.token_in_slot]
+        discarded_tokens = []
+        if self.mode == 'The Great Library':
+            discarded_tokens = [self.name_mapping[token.token_name] for token in self.progress_board.discarded_tokens]
+        return self.convert_to_np(tokens, discarded_tokens, max_len=5).flatten()
+
+    def set_wonders(self):
         wonder_count = 8
-        chosen_wonders = csv_dict['wonder_list'][np.random.choice(csv_dict['wonder_list'].shape[0], wonder_count, replace=False)]
-        wonders = []
+        chosen_wonders = self.csv_dict['wonder_list'][np.random.choice(self.csv_dict['wonder_list'].shape[0], wonder_count, replace=False)]
+        wonders, wonders_selectable = [], []
         for wonder in chosen_wonders:
             wonders.append(Wonder(wonder[0], wonder[1], wonder[2], wonder[3], False))
+            wonders_selectable.append(True)
+        return wonders, wonders_selectable
+
+    def draft_wonders(self, action): #action w0-w3
         player = self.state_variables.turn_player
         opponent = player ^ 1
-        selectable = [True for i in range(8)]
-        print("")
-        print("Before the game begins, each player selects 4 wonders.")
-        print("Player " + str(player+1) + " selects the first, Player " + str(opponent+1) + " chooses the next two, and then Player " + str(player+1) + " gets the remaining wonder.")
-        selectable = self.wonder_input(player, wonders[:4], selectable, 0)
-        selectable = self.wonder_input(opponent, wonders[:4], selectable, 0)
-        selectable = self.wonder_input(opponent, wonders[:4], selectable, 0)
-        self.players[player].wonders_in_hand.append(wonders[selectable[:4].index(True)])
-        selectable[selectable[:4].index(True)] = False
-        print("PLAYER " + str(player+1) + " receives the last remaining wonder.")
-
-        print("")
-        print("Now the next four wonders are selected in the same fashion, but Player " + str(opponent+1) + " begins.")
-        selectable = self.wonder_input(opponent, wonders[4:], selectable, 4)
-        selectable = self.wonder_input(player, wonders[4:], selectable, 4)
-        selectable = self.wonder_input(player, wonders[4:], selectable, 4)
-        self.players[opponent].wonders_in_hand.append(wonders[selectable[4:].index(True)+4])
-        selectable[selectable[4:].index(True)+4] = False
-        print("PLAYER " + str(opponent + 1) + " receives the last remaining wonder.")
-
-        print("Player 1 Wonders: ", self.players[0].wonders_in_hand)
-        print("Player 2 Wonders: ", self.players[1].wonders_in_hand)
-        print("")
-
-    # Generates all valid moves a player can take during wonder drafting
-    def valid_moves_wonder(self, remaining_wonders, selectable, shift):
-        valid_moves = ['w'+str(i) for i in range(len(remaining_wonders)) if selectable[i + shift]]
-        return valid_moves
-
-    #Select a single wonder during wonder drafting
-    def wonder_input(self, player, remaining_wonders, selectable, shift):
-        count = 0
-        selectable_wonders = '['
-        for i in range(len(remaining_wonders)):
-            if selectable[i+shift]:
-                selectable_wonders += '#' + str(i) + ' ' + str(remaining_wonders[i])
-                count += 1
-            selectable_wonders += ', '
-        selectable_wonders = selectable_wonders[:-2]
-        selectable_wonders += ']'
-
-        print("Valid moves: " + str(self.valid_moves_wonder(remaining_wonders, selectable, shift)) + "\n")
-        print("Wonders available: ", selectable_wonders)
-        input_string = "PLAYER " + str(player + 1) + ": "+ "Select a remaining [w]onder of the " + str(count) + " available. "
-
-        if self.players[player].player_type == 'agent':
-            self.state = self.copy_state(player)
-            wonder_dict = {k: v for k, v in zip(remaining_wonders, selectable[0 + shift:4 + shift])}
-            choice = self.players[player].agent.getAction(self.valid_moves_wonder(remaining_wonders, selectable, shift), input_string, self.state, wonder_dict)
+        shift = 0 if any(self.wonders_selectable[:4]) else 4
+        choice = int(action[1])+shift
+        self.choose_wonder(player, choice)
+        if self.wonders_selectable[0+shift:4+shift].count(True) == 3:
+            self.state_variables.change_turn_player()
+        elif self.wonders_selectable[0+shift:4+shift].count(True) == 1:
+            choice = self.wonders_selectable[0+shift:4+shift].index(True) + shift
+            self.choose_wonder(opponent, choice)
+        if not any(self.wonders_selectable):
+            self.mode = 'main'
+            self.display_game_state()
         else:
-            choice = self.players[player].agent.getAction(input_string)
+            self.display_wonders()
 
-        if choice == '':
-            print("Select a valid action!")
-            return self.wonder_input(player, remaining_wonders, selectable, shift)
-        action, position = choice[0], choice[1:]
+    def choose_wonder(self, player, choice):
+        self.players[player].wonders_in_hand.append(self.wonders[choice])
+        self.wonders_selectable[choice] = False
 
-        if action == 's':
-            image = ImageDisplay(220, 350)
-            p1_wonders, p2_wonders = self.players[0].wonders_in_hand, self.players[1].wonders_in_hand
-            image.display_wonder(remaining_wonders, selectable, shift, p1_wonders, p2_wonders)
-            return self.wonder_input(player, remaining_wonders, selectable, shift)
-        elif action == 'w':
-            if not position.isdigit():
-                print("Wonder choice must be an integer!")
-                return self.wonder_input(player, remaining_wonders, selectable, shift)
-            elif int(position) in range(len(remaining_wonders)) and selectable[int(position)+shift]:
-                self.players[player].wonders_in_hand.append(remaining_wonders[int(position)])
-                selectable[int(position)+shift] = False
-                return selectable
-            else:
-                print('Select a valid wonder!')
-                return self.wonder_input(player, remaining_wonders, selectable, shift)
-        else:
-            print("Select a valid action!")
-            return self.wonder_input(player, remaining_wonders, selectable, shift)
+    def display_wonders(self):
+        if self.display:
+            shift = 0 if any(self.wonders_selectable[:4]) else 4
+            selectable_wonders = '['
+            for i, wonder in enumerate(self.wonders[0+shift:4+shift]):
+                if self.wonders_selectable[i + shift]:
+                    selectable_wonders += '#' + str(i) + ' ' + str(wonder)
+                selectable_wonders += ', '
+            selectable_wonders = selectable_wonders[:-2]
+            selectable_wonders += ']'
+            print("Wonders available: ", selectable_wonders)
 
     def valid_moves(self):
+        player = self.state_variables.turn_player
+        opponent = player ^ 1
+        if self.mode == 'wonders':
+            shift = 0 if any(self.wonders_selectable[:4]) else 4
+            valid_moves = ['w' + str(i) for i in range(len(self.wonders[0+shift:4+shift])) if self.wonders_selectable[0+shift:4+shift][i]]
+        elif self.mode == 'main':
+            valid_moves = self.valid_moves_main()
+        elif self.mode == 'token':
+            valid_moves = ['c' + str(i) for i in range(len(self.progress_board.tokens)) if self.progress_board.tokens[i].token_in_slot]
+        elif self.mode == 'law':
+            valid_moves = ['r' + str(i) for i in range(len(self.players[player].science))]
+            valid_moves.append('q')
+        elif self.mode in ['Circus Maximus', 'The Statue of Zeus']:
+            color = 'Grey' if self.mode == 'Circus Maximus' else 'Brown'
+            opponent_cards = [card for card in self.players[opponent].cards_in_play if card.card_type == color]
+            valid_moves = ['d' + str(i) for i in range(len(opponent_cards))]
+        elif self.mode == 'The Mausoleum':
+            valid_moves = ['c' + str(i) for i in range(len(self.state_variables.discarded_cards))]
+        elif self.mode == 'The Great Library':
+            valid_moves = ['c' + str(i) for i in range(len(self.progress_board.discarded_tokens))]
+        return valid_moves
+
+    def valid_moves_main(self):
         '''Returns list of valid moves for given board state and player states'''
         player = self.state_variables.turn_player
         opponent = player ^ 1
         cards = self.age_boards[self.state_variables.current_age].card_positions
         selectable = [cardslot.card_board_position for cardslot in cards if cardslot.card_selectable == 1 and cardslot.card_in_slot is not None]
-        valid_moves = ['d' + str(i) for i in selectable]
+        valid_moves = []
         for i in selectable:
             if self.card_constructable(self.players[player], self.players[opponent], cards[i].card_in_slot, True):
                 valid_moves.append('c'+str(i))
@@ -206,43 +276,17 @@ class Game:
             valid_moves.append('turn')
         if self.players[player].law:
             valid_moves += ['r' + str(i) for i in range(len(self.players[player].science))]
+        valid_moves += ['d' + str(i) for i in selectable]
         return valid_moves
 
-    def request_player_input(self):
-        """Function to begin requesting player input
+    def is_done(self):
+        if self.display:
+            print(self.outcome)
+        self.done = True
 
-        Returns:
-            void: [description]
-        """
+    def select_action(self, choice):
+        """Function to begin requesting player input"""
         player = self.state_variables.turn_player
-        self.state = self.copy_state(player)
-        self.constructable_dict = {'cards': [card.card_name for card in self.players[player].cards_in_play],
-                                   'wonders': [wonder.wonder_name for wonder in self.players[player].wonders_in_play],
-                                   'owned_tokens': [token.token_name for token in self.players[player].progress_tokens_in_play],
-                                   'opponent_tokens': [token.token_name for token in self.players[player ^ 1].progress_tokens_in_play]}
-        print("Valid moves: " + str(self.valid_moves()) + "\n")
-
-        if self.state_variables.turn_choice:
-            print("")
-            print("As the player with the weaker military, you are allowed to choose who begins the next Age.")
-            print("Enter [turn] to allow your opponent to begin.")
-            print("Otherwise continue playing:")
-
-        if self.players[player].law:
-            print("")
-            print("Player " + str(player + 1) +
-                  " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
-
-        input_string = "PLAYER " + str(player + 1) + ": " + "Select a card to [c]onstruct, [d]iscard for coins, or use for [w]onder. "
-        # + "(Format is 'X#' where X is c/d and # is card position)")
-        if self.players[player].player_type == 'agent':
-            choice = self.players[player].agent.getAction(self.valid_moves(), input_string, self.state, 'main')
-        else:
-            choice = self.players[player].agent.getAction(input_string)
-
-        if choice == '':
-            print("Select a valid action! (construct, discard or wonder)")
-            return self.request_player_input()
         action, position, position_wonder = choice[0], choice[1:], "0"
 
         # If the player owns the law token, allow redeeming it in exchange for a scientific symbol
@@ -251,54 +295,36 @@ class Game:
             # Check for scientific victory
             if all([symbol >= 1 for symbol in self.players[player].science]):
                 self.outcome = 'Player ' + str(player + 1) + ' has won the Game through Scientific Victory!'
+                self.is_done()
                 return self.outcome
+            return
 
         if choice == 'turn' and self.state_variables.turn_choice:
-            print("Your opponent is chosen to begin.")
             self.state_variables.turn_choice = False
             self.state_variables.change_turn_player()
-            return self.request_player_input()
+            return
 
         if action == 'q':
             self.outcome = "Game has been quit"
+            self.is_done()
             return self.outcome
 
         if choice == 'clear': # has been implemented for debugging
-            # clear board and progress age
             age = self.state_variables.current_age
             slots_in_age = self.age_boards[age].card_positions
             for slot in range(len(slots_in_age)):
                 slots_in_age[slot].card_in_slot = None
             self.state_variables.progress_age()
             self.display_game_state()
-            print("Board has been cleared!")
-            return self.request_player_input()
+            return
 
         if action == 's': #Display a visual representation of the game
             self.show_board()
-            print("Please choose a card!")
-            return self.request_player_input()
+            return
 
         if action == 'w':
-            if len(position.split(" ")) == 2:
-                if position.split(" ")[0].isdigit() and position.split(" ")[1].isdigit():
-                    position_wonder = position.split(" ")[1]
-                    position = position.split(" ")[0]
-                else:
-                    print("Card and wonder choice must be an integer!")
-                    return self.request_player_input()
-            else:
-                print("Choose a card and a wonder separated by a space.")
-                return self.request_player_input()
-
-        if action != 'c' and action != 'd' and action != 'w':
-            if not self.players[player].law or not action == 'r':
-                print("Select a valid action! (construct, discard or wonder)")
-            return self.request_player_input()
-
-        if not position.isdigit():
-            print("Card choice must be an integer!")
-            return self.request_player_input()
+            position_wonder = position.split(" ")[1]
+            position = position.split(" ")[0]
 
         self.select_card(int(position), action, int(position_wonder))
 
@@ -319,57 +345,32 @@ class Game:
         age = self.state_variables.current_age
         slots_in_age = self.age_boards[age].card_positions
 
-        # Checks for valid card choices
-        if position >= len(slots_in_age) or position < 0:
-            print('Select a card on the board!')
-            return self.request_player_input()
-
         chosen_position = slots_in_age[position]
-
-        if chosen_position.card_in_slot is None:
-            print('This card has already been chosen!')
-            return self.request_player_input()
-
-        if chosen_position.card_selectable == 0:
-            print('Card is covered, you cannot pick this card!')
-            return self.request_player_input()
 
         # Discard or construct chosen card and remove card from board
         if action == 'c':
             # Add card to board.
             if self.card_constructable(player_state, opponent_state, chosen_position.card_in_slot, False) is True:
                 player_state.construct_card(chosen_position.card_in_slot, player_board, opponent_board, False)
-            else:
-                print('You do not have the resources required to construct this card!')
-                return self.request_player_input()
         elif action == 'd':
             # Gain coins based on yellow building owned.
             yellow_card_count = len([card for card in player_board if card.card_type == 'Yellow'])
             player_state.coins += 2 + yellow_card_count
             self.state_variables.discarded_cards.append(chosen_position.card_in_slot)
         elif action == 'w':
-            if position_wonder in range(len(player_state.wonders_in_hand)):
-                if not [wonder.wonder_in_play for wonder in player_state.wonders_in_hand][position_wonder]:
-                    if self.wonder_constructable(player_state, opponent_state, position_wonder, False):
-                        player_state.construct_wonder(position_wonder, opponent_state, player, self.state_variables.discarded_cards,
-                                                      player_board, opponent_board, self.progress_board, self.state)
-                        if len(self.players[0].wonders_in_play + self.players[1].wonders_in_play) == 7:
-                            for i in range(len(self.players[0].wonders_in_hand)):
-                                player_state.wonders_in_hand[i].wonder_in_play = True
-                                opponent_state.wonders_in_hand[i].wonder_in_play = True
-                            print("\nOnly 7 wonders can be constructed. The 8th wonder is discarded.\n")
-                    else:
-                        print('You do not have the resources required to construct this wonder!')
-                        return self.request_player_input()
-                else:
-                    print('Wonder was already constructed!')
-                    return self.request_player_input()
-            else:
-                print('Select a wonder in your hand!')
-                return self.request_player_input()
-        else:
-            print('This is not a valid action!')
-            return self.request_player_input()
+            if self.wonder_constructable(player_state, opponent_state, position_wonder, False):
+                player_state.construct_wonder(position_wonder, opponent_state, player, self.state_variables.discarded_cards,
+                                              player_board, opponent_board, self.display)
+                if player_state.law:
+                    self.mode = 'law'
+                elif any(player_state.wonder_effects.values()):
+                    index = list(player_state.wonder_effects.values()).index(True)
+                    self.mode = list(player_state.wonder_effects.keys())[index]
+                if len(self.players[0].wonders_in_play + self.players[1].wonders_in_play) == 7:
+                    for i in range(len(self.players[0].wonders_in_hand)):
+                        player_state.wonders_in_hand[i].wonder_in_play = True
+                        opponent_state.wonders_in_hand[i].wonder_in_play = True
+                    if self.display: print("\nOnly 7 wonders can be constructed. The 8th wonder is discarded.\n")
 
         self.state_variables.turn_choice = False
         chosen_position.card_in_slot = None
@@ -380,10 +381,12 @@ class Game:
         if self.state_variables.military_track >= 9:
             self.display_game_state()
             self.outcome = 'Player 1 has won the Game through Military Supremacy!'
+            self.is_done()
             return self.outcome
         elif self.state_variables.military_track <= -9:
             self.display_game_state()
             self.outcome = 'Player 2 has won the Game through Military Supremacy!'
+            self.is_done()
             return self.outcome
 
         # Award victory points based on conflict pawn location
@@ -394,12 +397,23 @@ class Game:
 
         # If 2 matching scientific symbols are collected, allow progress token selection
         self.check_progress_tokens(player)
-        self.check_progress_tokens(player) #check a second time if law token was redeemed
+        if self.mode == 'token' or self.mode == 'law' or any(player_state.wonder_effects.values()):
+            self.perform_check = True
+            return
+
+        self.perform_checks()
+        return
+
+    def perform_checks(self):
+        player = self.state_variables.turn_player
+        age = self.state_variables.current_age
+        slots_in_age = self.age_boards[age].card_positions
 
         # Check for scientific victory
         if all([symbol >= 1 for symbol in self.players[player].science]):
             self.display_game_state()
             self.outcome = 'Player ' + str(player + 1) + ' has won the Game through Scientific Victory!'
+            self.is_done()
             return self.outcome
 
         # Award victory points based on purple cards
@@ -411,7 +425,7 @@ class Game:
             if len(card_effects) > 0:
                 self.update_guild_points(card_effects, 1)
 
-            # Check for end of age (all cards drafted)
+        # Check for end of age (all cards drafted)
         if all(slots_in_age[slot].card_in_slot is None for slot in range(len(slots_in_age))):
             self.players[player].replay = False
             self.state_variables.progress_age()
@@ -421,9 +435,7 @@ class Game:
                 self.state_variables.change_turn_player()
             else:
                 self.players[player].replay = False
-                print("")
-                print("Player " + str(player +1) + " has the Replay effect active and is allowed to play again.")
-                print("")
+                if self.display: print("\nPlayer " + str(player +1) + " has the Replay effect active and is allowed to play again.\n")
 
         if self.state_variables.game_end:
             # Civilian victory: 1 victory point for every 3 coins
@@ -432,29 +444,29 @@ class Game:
             self.display_game_state()
 
             # Handle Civilian Victory
-            print('Victory Points Player 1: ', self.players[0].victory_points)
-            print('Victory Points Player 2: ', self.players[1].victory_points)
+            if self.display:
+                print('Victory Points Player 1: ', self.players[0].victory_points)
+                print('Victory Points Player 2: ', self.players[1].victory_points)
             if self.players[0].victory_points > self.players[1].victory_points:
                 self.outcome = 'Player 1 has won the Game through Civilian Victory!'
             elif self.players[0].victory_points < self.players[1].victory_points:
                 self.outcome = 'Player 2 has won the Game through Civilian Victory!'
             else:
-                print('Both players have the same number of victory points.')
                 p1_blue_vp = sum([int(card.card_effect_passive[0]) for card in self.players[0].cards_in_play if card.card_type == 'Blue'])
                 p2_blue_vp = sum([int(card.card_effect_passive[0]) for card in self.players[1].cards_in_play if card.card_type == 'Blue'])
-                print('Victory Points Civilian Buildings Player 1: ', p1_blue_vp)
-                print('Victory Points Civilian Buildings Player 2: ', p2_blue_vp)
+                if self.display:
+                    print('Both players have the same number of victory points.')
+                    print('Victory Points Civilian Buildings Player 1: ', p1_blue_vp)
+                    print('Victory Points Civilian Buildings Player 2: ', p2_blue_vp)
                 if p1_blue_vp > p2_blue_vp:
                     self.outcome = 'Player 1 has won the Game with the most victory points from Civilian Buildings!'
                 elif p1_blue_vp < p2_blue_vp:
                     self.outcome = 'Player 2 has won the Game with the most victory points from Civilian Buildings!'
                 else:
                     self.outcome = 'Both players have the same number of victory points from Civilian Buildings. The game ends in a draw!'
+            self.is_done()
             return self.outcome
-
-        # Continue game loop.
         self.display_game_state()
-        return self.request_player_input()
 
     # Takes 2 Player objects and 1 Card object and checks whether card is constructable given state and cost.
     def card_constructable(self, player, opponent, card, check):
@@ -597,16 +609,11 @@ class Game:
 
     # If the token Law is in posession, allow redeeming it for a scientific symbol
     def token_law(self, player, position):
-        if not position.isdigit():
-            return print("Symbol choice must be an integer!")
-        elif int(position) in range(len(self.players[player].science)):
-            self.players[player].science[int(position)] += 1
-            self.players[player].law = False
-            print("Token has been redeemed!")
-            self.check_progress_tokens(player)
-            self.display_game_state()
-        else:
-            return print('Select a valid scientific symbol!')
+        self.players[player].science[int(position)] += 1
+        self.players[player].law = False
+        if self.display: print("Token has been redeemed!")
+        self.check_progress_tokens(player)
+        self.display_game_state()
 
     # If 2 matching scientific symbols are collected, allow progress token selection
     def check_progress_tokens(self, player):
@@ -615,50 +622,21 @@ class Game:
                          range(len(self.players[player].science))]
         if any(match_science) and any([token.token_in_slot for token in self.progress_board.tokens]):
             self.state_variables.progress_tokens_awarded[match_science.index(True)] = True
-            token = self.select_token()
-            self.players[player].construct_token(self.progress_board.tokens[token], self.progress_board, self.state)
-            self.progress_board.tokens[token].token_in_slot = False
+            self.mode = 'token'
 
     # Requests player input to select one of the tokens still available where token_in_slot == True
-    def select_token(self):
-        print("Valid moves: " + str(self.valid_moves_token()))
-        print("")
-        print("Player " + str(self.state_variables.turn_player + 1) +
-              " gathered 2 matching scientific symbols.")
-        input_string = "PLAYER " + str(self.state_variables.turn_player + 1) + ": " + "Please [c]onstruct a progress token from the Board. "
-        if self.players[self.state_variables.turn_player].player_type == 'agent':
-            choice = self.players[self.state_variables.turn_player].agent.getAction(self.valid_moves_token(), input_string, self.state, 'token')
-        else:
-            choice = self.players[self.state_variables.turn_player].agent.getAction(input_string)
-        if choice == '':
-            print('This is not a valid action!')
-            return self.select_token()
+    def select_token(self, choice):
+        player = self.state_variables.turn_player
+        if self.display: print("Player " + str(player + 1) + " gathered 2 matching scientific symbols.")
         action, position = choice[0], choice[1:]
         if action == 's': #Display a visual representation of the game
             self.show_board()
-            print("Please choose a token!")
-            return self.select_token()
         elif action == 'c':
-            if not position.isdigit():
-                print("Token choice must be an integer!")
-                return self.select_token()
-            elif int(position) in range(len(self.progress_board.tokens)):
-                if self.progress_board.tokens[int(position)].token_in_slot:
-                    return int(position)
-                else:
-                    print('This token has already been chosen!')
-                    return self.select_token()
-            else:
-                print('Select a valid token on the board!')
-                return self.select_token()
-        else:
-            print('This is not a valid action!')
-            return self.select_token()
-
-    # Generates all valid moves a player can take during token selection
-    def valid_moves_token(self):
-        valid_moves = ['c' + str(i) for i in range(len(self.progress_board.tokens)) if self.progress_board.tokens[i].token_in_slot]
-        return valid_moves
+            self.mode = 'main'
+            self.players[player].construct_token(self.progress_board.tokens[int(position)], self.display)
+            self.progress_board.tokens[int(position)].token_in_slot = False
+        if self.players[player].law:
+            self.mode = 'law'
 
     # Calculates the rate at which a resource can be bought
     def calculate_rate(self, resource, cards, opponent):
@@ -713,16 +691,17 @@ class Game:
     # Displays the game state in a nice enough way.
     def display_game_state(self):
         '''Print a visual representation of the current game state'''
-        player = self.state_variables.turn_player
-        age = self.state_variables.current_age
+        if self.display:
+            player = self.state_variables.turn_player
+            age = self.state_variables.current_age
 
-        print("Progress Tokens :", self.progress_board)
-        print("Military Track : " + self.display_military_board())
-        self.age_boards[age].display_board()
-        print("Player 1 >", self.players[0])
-        print("Player 2 >", self.players[1])
-        print("")
-        print("Current turn player is Player ", str(player + 1))
+            print("Progress Tokens :", self.progress_board)
+            print("Military Track : " + self.display_military_board())
+            self.age_boards[age].display_board()
+            print("Player 1 >", self.players[0])
+            print("Player 2 >", self.players[1])
+            print("")
+            print("Current turn player is Player ", str(player + 1))
 
     # Displays the military conflict in the command line
     def display_military_board(self):
@@ -1012,6 +991,8 @@ class Player:
         self.science = [0,0,0,0,0,0]
         self.law = False
         self.replay = False
+        self.wonder_effects = {'Circus Maximus': False, 'The Statue of Zeus': False,
+                               'The Mausoleum': False, 'The Great Library': False}
 
     def __deepcopy__(self, memo):
         if self in memo: #check if already copied
@@ -1034,6 +1015,7 @@ class Player:
         new_instance.science = self.science[:]
         new_instance.law = self.law
         new_instance.replay = self.replay
+        new_instance.wonder_effects = copy.deepcopy(self.wonder_effects, memo={})
 
         memo[self] = new_instance
         return new_instance
@@ -1127,11 +1109,10 @@ class Player:
         return
 
     # Construct the selected wonder by applying their respective effect
-    def construct_wonder(self, position_wonder, opponent, player_turn, discarded_cards, player_board, opponent_board, progress_board, state):
+    def construct_wonder(self, position_wonder, opponent, player_turn, discarded_cards, player_board, opponent_board, display):
         wonder = self.wonders_in_hand[position_wonder]
         effect = wonder.wonder_effect_when_played
         effect_passive = wonder.wonder_effect_passive
-        discarded_tokens = progress_board.discarded_tokens
         if 'Theology' in [token.token_name for token in self.progress_tokens_in_play]:
             self.replay = True
 
@@ -1149,14 +1130,24 @@ class Player:
 
         if 'Replay' in effect_passive:
             self.replay = True
-        elif 'Grey' in effect_passive:
-            self.wonder_destory_card(opponent, 'Grey', player_turn, discarded_cards, state)
-        elif 'Brown' in effect_passive:
-            self.wonder_destory_card(opponent, 'Brown', player_turn, discarded_cards, state)
+        elif 'Grey' in effect_passive or 'Brown' in effect_passive:
+            color = 'Grey' if 'Grey' in effect_passive else 'Brown'
+            wonder_name = 'Circus Maximus' if 'Grey' in effect_passive else 'The Statue of Zeus'
+            opponent_cards = [card for card in opponent.cards_in_play if card.card_type == color]
+            if len(opponent_cards) == 1:
+                if display: print("\n" + str(opponent_cards[0]) + " of Player " + str(player_turn^1 + 1) + " is discarded.")
+                self.discard_card(opponent_cards[0], opponent, discarded_cards)
+            elif len(opponent_cards) >= 2:
+                self.wonder_effects[wonder_name] = True
         elif wonder.wonder_name == 'The Mausoleum':
-            self.wonder_mausoleum(discarded_cards, player_turn, player_board, opponent_board, state)
+            if len(discarded_cards) == 1:
+                if display: print("\nDiscarded card " + str(discarded_cards[0]) + " is constructed for free.")
+                discarded_cards.remove(discarded_cards[0])
+                self.construct_card(discarded_cards[0], player_board, opponent_board, True)
+            elif len(discarded_cards) >= 2:
+                self.wonder_effects['The Mausoleum'] = True
         elif wonder.wonder_name == 'The Great Library':
-            self.wonder_great_library(discarded_tokens, player_turn, progress_board, state)
+            self.wonder_effects['The Great Library'] = True
 
         wonder.wonder_in_play = True
         self.wonders_in_hand[position_wonder].wonder_in_play = True
@@ -1164,27 +1155,15 @@ class Player:
         return
 
     # Enables the player to discard one card from his opponent in the specified color
-    def wonder_destory_card(self, opponent, color, player_turn, discarded_cards, state):
+    def wonder_destory_card(self, choice, opponent, color, player_turn, discarded_cards, name, display):
         opponent_cards = [card for card in opponent.cards_in_play if card.card_type == color]
         opponent_turn = player_turn ^ 1
-
-        if len(opponent_cards) >= 2:
-            cards = self.print_string(opponent_cards)
-            print("")
-            print(color + " cards of Player " + str(opponent_turn + 1) + ": " + cards)
-            input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a " + color + " card of Player " + \
-                           str(opponent_turn + 1) + " to discard. "
-            result = self.request_input(input_string,self.wonder_destory_card,opponent_cards, 'd', 'Card', state, 'destroy ' + color)
-            if type(result) is int:
-                card = opponent_cards[result]
-                self.discard_card(card, opponent, discarded_cards)
-            else:
-                result(opponent, color, player_turn, discarded_cards, state)
-        elif len(opponent_cards) == 1:
-            card = opponent_cards[0]
-            print("")
-            print(str(card) + " of Player " + str(opponent_turn + 1) + " is discarded.")
-            self.discard_card(card, opponent, discarded_cards)
+        cards = self.print_string(opponent_cards)
+        if display: print('\n' + color + " cards of Player " + str(opponent_turn + 1) + ": " + cards)
+        action, position = choice[0], choice[1:]
+        card = opponent_cards[int(position)]
+        self.discard_card(card, opponent, discarded_cards)
+        self.wonder_effects[name] = False
 
     # Sub-function which actually removes the card from the board and reduces resources
     def discard_card(self, card, opponent, discarded_cards):
@@ -1197,76 +1176,24 @@ class Player:
         discarded_cards.append(card)
 
     # Enables the player to pick a discarded card and construct it for free
-    def wonder_mausoleum(self, discarded_cards, player_turn, player_board, opponent_board, state):
-        if len(discarded_cards) >= 2:
-            cards = self.print_string(discarded_cards)
-            print("")
-            print("Discarded cards since the beginning of the game: " + cards)
-            input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a discarded card and construct it for free. "
-
-            result = self.request_input(input_string, self.wonder_mausoleum, discarded_cards, 'c', 'Card', state, 'mausoleum')
-            if type(result) is int:
-                card = discarded_cards[result]
-                discarded_cards.remove(card)
-                self.construct_card(card, player_board, opponent_board, True)
-            else:
-                result(discarded_cards, player_turn, player_board, opponent_board, state)
-        elif len(discarded_cards) == 1:
-            card = discarded_cards[0]
-            print("")
-            print("Discarded card " + str(card) + " is constructed for free.")
-            discarded_cards.remove(card)
-            self.construct_card(card, player_board, opponent_board, True)
+    def wonder_mausoleum(self, choice, discarded_cards, player_board, opponent_board, display):
+        cards = self.print_string(discarded_cards)
+        if display: print("\nDiscarded cards since the beginning of the game: " + cards)
+        action, position = choice[0], choice[1:]
+        card = discarded_cards[int(position)]
+        discarded_cards.remove(card)
+        self.construct_card(card, player_board, opponent_board, True)
+        self.wonder_effects['The Mausoleum'] = False
 
     # Enables the player to pick 1 from 3 discarded Progress Tokens
-    def wonder_great_library(self, discarded_tokens, player_turn, progress_board, state):
+    def wonder_great_library(self, choice, discarded_tokens, display):
         tokens = self.print_string(discarded_tokens)
-        print("")
-        print("3 random discarded tokens from the beginning of the game: " + tokens)
-        input_string = "PLAYER " + str(player_turn + 1) + ": " + "Select a discarded token and construct it for free. "
-        result = self.request_input(input_string, self.wonder_great_library, discarded_tokens, 'c', 'Token', state, 'library')
-        if type(result) is int:
-            token = discarded_tokens[result]
-            discarded_tokens.remove(token)
-            self.construct_token(token, progress_board, state)
-        else:
-            result(discarded_tokens, player_turn, progress_board, state)
-
-    # Sub-function to request player input
-    def request_input(self, input_string, function_false, card_list, key, print_object, state, function):
-        print("Valid moves: " + str(self.valid_moves_effect(card_list, key)) + "\n")
-        if self.player_type == 'agent':
-            choice = self.agent.getAction(self.valid_moves_effect(card_list, key), input_string, state, function)
-        else:
-            choice = self.agent.getAction(input_string)
-        if choice == '':
-            print("Select a valid action!")
-            return function_false
+        if display: print("\n3 random discarded tokens from the beginning of the game: " + tokens)
         action, position = choice[0], choice[1:]
-        if action == 's':
-            width, height = 220, 350
-            if print_object == 'Token':
-                width, height = 140, 140
-            image = ImageDisplay(width, height)
-            image.display_cards(card_list, print_object)
-            return function_false
-        elif action == key:
-            if not position.isdigit():
-                print(str(print_object) + " choice must be an integer!")
-                return function_false
-            elif int(position) in range(len(card_list)):
-                return int(position)
-            else:
-                print("Select a valid " + print_object.lower() + "!")
-                return function_false
-        else:
-            print("Select a valid action!")
-            return function_false
-
-    # Generates all valid moves a player can take during wonder effects
-    def valid_moves_effect(self, card_list, key):
-        valid_moves = [key + str(i) for i in range(len(card_list))]
-        return valid_moves
+        token = discarded_tokens[int(position)]
+        discarded_tokens.remove(token)
+        self.construct_token(token, display)
+        self.wonder_effects['The Great Library'] = False
 
     # Creates a string which can be used to print in the command line
     def print_string(self, print_cards):
@@ -1283,7 +1210,7 @@ class Player:
         return
 
     # construct the selected token by applying their respective effect
-    def construct_token(self, token, progress_board, state):
+    def construct_token(self, token, display):
         effect = token.token_effect_when_played
         name = token.token_name
         owned_tokens = [own_token.token_name for own_token in self.progress_tokens_in_play]
@@ -1296,25 +1223,14 @@ class Player:
             self.coins += int(effect[-2])
         elif 'S' in effect: # Law token
             self.law = True
-            print("")
-            print("Player " + str(self.player_number + 1) + " >", self.__repr__())
-            self.token_law(progress_board, state)
+            if display: print("\nPlayer " + str(self.player_number + 1) + " >", self.__repr__())
         elif name == 'Mathematics':
             self.victory_points += 3*len(owned_tokens) + 3
 
     # If the token Law is in posession, allow redeeming it for a scientific symbol
-    def token_law(self, progress_board, state):
-        print("Valid moves: " + str(self.valid_moves_token_law()) + "\n")
-        print("Player " + str(self.player_number + 1) +
-              " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
-        input_string = "PLAYER " + str(self.player_number + 1) + ": "
-        if self.player_type == 'agent':
-            choice = self.agent.getAction(self.valid_moves_token_law(), input_string, state, 'law')
-        else:
-            choice = self.agent.getAction(input_string)
-        if choice == '':
-            print("Selected action was not valid. Resume game.")
-            return print("")
+    def token_law(self, choice, progress_board, display):
+        if display: print("Player " + str(self.player_number + 1) +
+                          " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
         action, position = choice[0], choice[1:]
         if action == 's':
             tokens = progress_board.tokens.copy()
@@ -1323,27 +1239,12 @@ class Player:
                 tokens.remove(tokens[token_names.index('Law')])
             image = ImageDisplay(140, 140)
             image.display_cards(tokens, 'Token')
-            return self.token_law(progress_board)
         elif action == 'r':
-            if not position.isdigit():
-                print("Symbol choice must be an integer!")
-                return self.token_law(progress_board)
-            elif int(position) in range(len(self.science)):
-                self.science[int(position)] += 1
-                self.law = False
-                print("Token has been redeemed!")
-            else:
-                print('Select a valid scientific symbol!')
-                return self.token_law(progress_board)
+            self.science[int(position)] += 1
+            self.law = False
+            if display: print("Token has been redeemed!")
         else:
-            print("Selected action was not valid. Resume game.")
-            return print("")
-
-    # Generates all valid moves a player can take when redeeming the law token
-    def valid_moves_token_law(self):
-        valid_moves = ['r' + str(i) for i in range(len(self.science))]
-        valid_moves.append('q')
-        return valid_moves
+            if display: print("Law token was not redeemed.")
 
 class StateVariables:
     '''Class to represent all state variables shared between players (military, turn player, etc.)'''
@@ -1489,69 +1390,3 @@ class Age:
         rows = self.number_of_rows
         for row in reversed(range(rows + 1)):
             print("Row", str(row + 1), ":", [card for card in cards if card.row == str(row)])
-
-# To supress print statements if required
-def supress_print(*args, **kwargs):
-    pass
-
-def import_agent(agent_type):
-    agent_module = importlib.import_module('testAgents')
-    return getattr(agent_module, agent_type) if agent_type is not None else None
-
-def read_data():
-    csv_dict = {'age_layouts': np.genfromtxt('age_layout.csv', delimiter=',', skip_header=1, dtype=str),
-                'age_layouts_labels': np.genfromtxt('age_layout.csv', delimiter=',', dtype=str, max_rows=1),
-                'card_list': np.genfromtxt('card_list.csv', delimiter=',', skip_header=1, dtype=str),
-                'card_list_labels': np.genfromtxt('card_list.csv', delimiter=',', dtype=str, max_rows=1),
-                'token_list': np.genfromtxt('progress_tokens.csv', delimiter=',', skip_header=1, dtype=str),
-                'wonder_list': np.genfromtxt('wonder_list.csv', delimiter=',', skip_header=1, dtype=str)}
-    return csv_dict
-
-# To run the game
-if __name__ == "__main__":
-    start_time = time.time()
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-t", "--training_count", type=int, default=0, help="Number of games during training")
-    parser.add_argument("-g", "--game_count", type=int, default=1, help="Number of games")
-    parser.add_argument("-a1", "--agent1_type", type=str, default=None, help="Type of Agent 1 to import")
-    parser.add_argument("-a2", "--agent2_type", type=str, default=None, help="Type of Agent 2 to import")
-    parser.add_argument("-l1", "--load_agent1", type=str, default=None, help="Name of Agent 1 to load")
-    parser.add_argument("-l2", "--load_agent2", type=str, default=None, help="Name of Agent 2 to load")
-    parser.add_argument("-s1", "--save_agent1", type=str, default=None, help="Name of Agent 1 to save")
-    parser.add_argument("-s2", "--save_agent2", type=str, default=None, help="Name of Agent 2 to save")
-    parser.add_argument("-alp", "--alpha", type=float, default=False, help="Alpha hyperparameter")
-    parser.add_argument("-eps", "--epsilon", type=float, default=False, help="Epsilon hyperparameter")
-    parser.add_argument("-gam", "--gamma", type=float, default=False, help="Gamma hyperparameter")
-    parser.add_argument("-mA", "--maxAttempts", type=int, default=False, help="maxAttempts hyperparameter")
-    parser.add_argument("-s", "--supress", type=str, default='False', help="Game state not printed when True")
-    args = parser.parse_args()
-
-    original_print = print
-    numTraining = args.training_count
-    game_count = args.game_count
-    agent1_class = import_agent(args.agent1_type)
-    agent2_class = import_agent(args.agent2_type)
-    load_name1, save_name1 = args.load_agent1, args.save_agent1
-    load_name2, save_name2 = args.load_agent2, args.save_agent2
-    load_save_names = [[load_name1, save_name1], [load_name2, save_name2]]
-    hyperparams = [args.alpha,args.epsilon, args.gamma, args.maxAttempts]
-    supress = True if args.supress == 'True' else False
-    wins_player1, wins_player2, draws = 0, 0, 0
-    if supress:
-        print()
-        print = supress_print
-    agent1, agent2 = str(args.agent1_type) if args.agent1_type is not None else 'HumanAgent', str(
-        args.agent2_type) if args.agent2_type is not None else 'HumanAgent'
-    csv_dict = read_data()
-    game1 = Game([numTraining, game_count], [agent1_class, agent2_class], [agent1, agent2], load_save_names, csv_dict, hyperparams)
-
-    elapsed_time = time.time() - start_time
-    original_print(f"\nExecution time: {elapsed_time} seconds")
-    pass
-
-
-# Code to measure execution time
-# start_time = time.time()
-#
-# self.elapsed_time += time.time() - start_time
-# original_print(f"\nExecution time: {self.elapsed_time} seconds")
