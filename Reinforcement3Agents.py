@@ -183,28 +183,28 @@ class LearningAgent:
                 discount += 1
 
     def convertActionName(self, state, action, function):
-        if isinstance(function, dict):
+        if isinstance(function, dict):      #max 12
             actionName = 'choose ' + list(function.keys())[int(action[1])].wonder_name
-        elif function == 'main':
-            if action[0] == 'c':
+        elif function == 'main':            #max 1 (for turn)
+            if action[0] == 'c':            #max 73
                 actionName = 'construct ' + state['age_board'][int(action[1:])].card_in_slot.card_name
-            elif action[0] == 'd':
+            elif action[0] == 'd':          #max 73
                 # actionName = 'discard ' + state['age_board'][int(action[1:])].card_in_slot.card_name
                 actionName = 'discard ' + state['age_board'][int(action[1:])].card_in_slot.card_type
-            elif action[0] == 'w':
+            elif action[0] == 'w':          #max 876 (12*73)
                 actionName = 'construct ' + state['player'].wonders_in_hand[int(action[-1])].wonder_name
                 # actionName += ', discard ' + state['age_board'][int(action.split()[0][1:])].card_in_slot.card_name
             else:
                 actionName = action
-        elif function == 'mausoleum':
+        elif function == 'mausoleum':       #max 0 (covered in main c)
             actionName = 'construct ' + state['state_variables'].discarded_cards[int(action[1:])].card_name
-        elif function == 'token':
+        elif function == 'token':           #max 10
             actionName = 'construct ' + state['progress_board'].tokens[int(action[1])].token_name
-        elif function == 'library':
+        elif function == 'library':         #max 0 (covered in token)
             actionName = 'construct ' + state['progress_board'].discarded_tokens[int(action[1])].token_name
-        elif function == 'law':
+        elif function == 'law':             #max 7
             actionName = action
-        elif 'destroy' in function.split():
+        elif 'destroy' in function.split(): #max 13
             # opponent_cards = [card.card_name for card in state['opponent'].cards_in_play if card.card_type == function.split()[1]]
             # actionName = 'destroy ' + opponent_cards[int(action[1:])]
             opponent_cards = [card.card_effect_passive for card in state['opponent'].cards_in_play if card.card_type == function.split()[1]]
