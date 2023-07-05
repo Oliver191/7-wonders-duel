@@ -71,10 +71,12 @@ class WondersEnv(Env):
             self.perform_checks()
             self.perform_check = False
 
+        if self.state_variables.turn_player == 0 and not self.done:
+            self.step(self.RandomAgent())
+
         self.get_observation()
         self.get_reward()
-        reward = self.reward1 if self.state_variables.turn_player == 0 else self.reward2
-        return self.state, reward, self.done, False, {}
+        return self.state, self.reward, self.done, False, {}
         # return self.state['player'], self.reward, self.done, False, {}
 
     def reset(self, seed=None, options=None):
@@ -85,15 +87,25 @@ class WondersEnv(Env):
         self.state_variables = StateVariables()
         self.progress_board = ProgressBoard(self.csv_dict)
         self.outcome, self.state, self.constructable_dict = None, None, {}
-        self.mode, self.reward1, self.reward2 = 'wonders', 0, 0
+        self.mode, self.reward = 'wonders', 0
         self.wonders, self.wonders_selectable = self.set_wonders()
         self.display_wonders()
+        if self.state_variables.turn_player == 0: self.step(self.RandomAgent())
         self.get_observation()
         return self.state, {}
         # return self.state['player'], {}
 
     def render(self):
         self.step('s')
+
+    def RandomAgent(self):
+        valid_moves = self.valid_moves()
+        action = np.random.choice(valid_moves)
+        action = self.convertActionName(action)
+        if self.display: print(str(fg.green + "RANDOM: " + action + rs.all))
+        action = self.all_actions.index(action)
+        return action
+
 
     def read_data(self):
         csv_dict = {'age_layouts': np.genfromtxt('age_layout.csv', delimiter=',', skip_header=1, dtype=str),
@@ -121,19 +133,17 @@ class WondersEnv(Env):
             action = self.convertNameAction(action)
         return action
 
-    def get_reward(self): #TODO ensure the reward is passed to each player
+    def get_reward(self): #TODO ensure the reward is passed to each player -> should be correct now
         if self.done:
             if 'Player' in self.outcome:
                 if self.outcome.split()[1] == "1":
-                    self.reward1 = 100
-                    self.reward2 = -100
+                    self.reward = -100
                 elif self.outcome.split()[1] == "2":
-                    self.reward1 = -100
-                    self.reward2 = 100
+                    self.reward = 100
             else:
-                self.reward1, self.reward2 = 10, 10
+                self.reward = 10
         else:
-            self.reward1, self.reward1 = 0, 0 #TODO maybe define a reward for each step (see getScore of Learning agent)
+            self.reward = 0 #TODO maybe define a reward for each step (see getScore of Learning agent)
 
     def get_observation(self):
         player = self.state_variables.turn_player

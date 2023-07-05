@@ -3,7 +3,7 @@ from WondersDuelEnv import WondersEnv
 
 # env = WondersEnv()
 # check_env(env)
-show = False
+show = True
 env = WondersEnv(show)
 episodes = 1
 

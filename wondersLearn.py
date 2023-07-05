@@ -16,8 +16,8 @@ env = WondersEnv(show)
 env = ActionMasker(env, mask_fn)
 obs, info = env.reset()
 done = False
-games = 5
-n_steps = 10000
+games = 1
+n_steps = 100000
 
 
 # agent2 = MaskablePPO(MaskableActorCriticPolicy, env, verbose=1)
@@ -40,6 +40,8 @@ agent2 = MaskablePPO(MaskableMultiInputActorCriticPolicy, env, verbose=1)
 #         obs, info = env.reset()
 
 for game in range(games):
+    obs, info = env.reset()
+    agent2._last_obs = None
     agent2.learn(n_steps, reset_num_timesteps=False, progress_bar=True, use_masking=True)
 
 # Save the trained agents if needed

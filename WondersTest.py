@@ -16,7 +16,7 @@ env = WondersEnv(show)
 env = ActionMasker(env, mask_fn)
 wins_player1, wins_player2, draws = 0, 0, 0
 agent2 = MaskablePPO.load(f'baselines3_agents/{name}', env=env)
-games = 100
+games = 1000
 start_time = time.time()
 
 for game in range(games):
@@ -25,14 +25,17 @@ for game in range(games):
     while not done:
         player = env.state_variables.turn_player
         action_masks = get_action_masks(env)
-        if player == 0:
-            valid_actions = np.where(action_masks == 1)[0]
-            action_names = [env.all_actions[action] for action in valid_actions]
-            random_action = np.random.choice(valid_actions)
-            obs, reward, done, truncated, info = env.step(random_action)
-        elif player == 1:
-            action, _ = agent2.predict(obs, action_masks=action_masks)
-            obs, reward, done, truncated, info = env.step(action)
+        # if player == 0:
+        #     valid_actions = np.where(action_masks == 1)[0]
+        #     action_names = [env.all_actions[action] for action in valid_actions]
+        #     random_action = np.random.choice(valid_actions)
+        #     obs, reward, done, truncated, info = env.step(random_action)
+        # elif player == 1:
+        #     action, _ = agent2.predict(obs, action_masks=action_masks)
+        #     obs, reward, done, truncated, info = env.step(action)
+        action, _ = agent2.predict(obs, action_masks=action_masks)
+        obs, reward, done, truncated, info = env.step(action)
+        if show: print(reward)
     if 'Player' in env.outcome:
         if env.outcome.split()[1] == "1":
             wins_player1 += 1
