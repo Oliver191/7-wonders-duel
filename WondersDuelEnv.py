@@ -24,9 +24,9 @@ class WondersEnv(Env):
         self.action_space = spaces.Discrete(len(self.all_actions))
         self.observation_space = spaces.Dict({'age_board': spaces.Box(low=0, high=200, shape=(26,), dtype=int), #2,13
                                               'player': spaces.Box(low=0, high=200, shape=(15,), dtype=int),
-                                              'player_cards': spaces.Box(low=0, high=200, shape=(120,), dtype=int), #4,30
+                                              'player_cards': spaces.Box(low=0, high=200, shape=(128,), dtype=int), #4,30
                                               'opponent': spaces.Box(low=0, high=200, shape=(15,), dtype=int),
-                                              'opponent_cards': spaces.Box(low=0, high=200, shape=(120,), dtype=int), #4,30
+                                              'opponent_cards': spaces.Box(low=0, high=200, shape=(128,), dtype=int), #4,30
                                               'state_variables': spaces.Box(low=0, high=200, shape=(3,), dtype=int),
                                               'progress_board': spaces.Box(low=0, high=200, shape=(10,), dtype=int), #2,5
                                              })
@@ -200,7 +200,7 @@ class WondersEnv(Env):
         wonders_in_hand = [self.name_mapping[wonder.wonder_name] for wonder in class_dict['wonders_in_hand'] if not wonder.wonder_in_play]
         wonders_in_play = [self.name_mapping[wonder.wonder_name] for wonder in class_dict['wonders_in_play']]
         progress_tokens_in_play = [self.name_mapping[token.token_name] for token in class_dict['progress_tokens_in_play']]
-        player_cards = self.convert_to_np(cards_in_play, wonders_in_hand, wonders_in_play, progress_tokens_in_play, max_len=30) # size 4
+        player_cards = self.convert_to_np(cards_in_play, wonders_in_hand, wonders_in_play, progress_tokens_in_play, max_len=32) # size 4
         for name in ['cards_in_play', 'wonders_in_hand', 'wonders_in_play', 'progress_tokens_in_play']:
             del class_dict[name]
         player_attributes = np.array(list(class_dict.values()) + custom_class.science, dtype=int) # size 15
