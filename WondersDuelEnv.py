@@ -8,13 +8,14 @@ import copy
 
 from gymnasium import Env
 import gymnasium.spaces as spaces
+from Player1Agents import RandomAgent
 
 class WondersEnv(Env):
     """Custom Environment that follows the Gym interface."""
 
     metadata = {"render.modes": ["human"]}
 
-    def __init__(self, display=False):
+    def __init__(self, display=False, agent=RandomAgent):
         super(WondersEnv, self).__init__()
 
         self.csv_dict = self.read_data()
@@ -31,12 +32,13 @@ class WondersEnv(Env):
                                              })
         # self.observation_space = spaces.Box(low=0, high=200, shape=(15,), dtype=int)
         self.display = display
+        self.agent1 = agent(self.display)
         self.perform_check = False
 
     def __repr__(self):
         return repr(self.outcome)
 
-    def step(self, action): #TODO adjust that player 1 is random
+    def step(self, action):
         action = self.convertAction(action)
         player = self.state_variables.turn_player
         opponent = player ^ 1
@@ -71,13 +73,12 @@ class WondersEnv(Env):
             self.perform_checks()
             self.perform_check = False
 
-        if self.state_variables.turn_player == 0 and not self.done:
-            self.step(self.RandomAgent())
+        if self.state_variables.turn_player == 0 and not self.done: #TODO change so called agent is random
+            self.step(self.getAction())
 
         self.get_observation()
         self.get_reward()
         return self.state, self.reward, self.done, False, {}
-        # return self.state['player'], self.reward, self.done, False, {}
 
     def reset(self, seed=None, options=None):
         self.done = False
@@ -90,21 +91,27 @@ class WondersEnv(Env):
         self.mode, self.reward = 'wonders', 0
         self.wonders, self.wonders_selectable = self.set_wonders()
         self.display_wonders()
-        if self.state_variables.turn_player == 0: self.step(self.RandomAgent())
+        if self.state_variables.turn_player == 0: self.step(self.getAction()) #TODO change so called agent is random
         self.get_observation()
         return self.state, {}
-        # return self.state['player'], {}
 
     def render(self):
         self.step('s')
 
-    def RandomAgent(self):
-        valid_moves = self.valid_moves()
-        action = np.random.choice(valid_moves)
-        action = self.convertActionName(action)
-        if self.display: print(str(fg.green + "RANDOM: " + action + rs.all))
-        action = self.all_actions.index(action)
+    def getAction(self):
+        state = self.getAgentState()
+        action = self.agent1.getAction(self.valid_moves(), self.convertActionName, self.all_actions, state, self.mode)
         return action
+
+    def getAgentState(self):
+        state = {'age_board': self.age_boards[self.state_variables.current_age].card_positions,
+                 'player': self.players[self.state_variables.turn_player],
+                 'opponent': self.players[self.state_variables.turn_player ^ 1],
+                 'state_variables': self.state_variables,
+                 'progress_board': self.progress_board,
+                 'wonders': self.wonders,
+                 'wonders_selectable': self.wonders_selectable}
+        return state
 
 
     def read_data(self):
@@ -127,13 +134,17 @@ class WondersEnv(Env):
 
     def convertAction(self, action):
         if type(action) != str:
-            # action = self.valid_moves()[int(action)]
-            action = self.all_actions[int(action)]
-            if self.display: print(str(fg.red + "Choice: " + action + rs.all))
-            action = self.convertNameAction(action)
+            action_masks = self.valid_action_mask()
+            if action_masks[int(action)] == 1:
+                action = self.all_actions[int(action)]
+                if self.display: print(str(fg.red + "Choice: " + action + rs.all))
+                action = self.convertNameAction(action)
+            else:
+                print("\n", str(fg.red + "Illegal action: " + self.all_actions[int(action)] + rs.all), "\n")
+                action = np.random.choice(self.valid_moves()) # TODO fix illegal action
         return action
 
-    def get_reward(self): #TODO ensure the reward is passed to each player -> should be correct now
+    def get_reward(self): #TODO change so called agent is random and the reward is correct
         if self.done:
             if 'Player' in self.outcome:
                 if self.outcome.split()[1] == "1":
@@ -157,6 +168,9 @@ class WondersEnv(Env):
                       'state_variables': self.convert_state_variables(),
                       'progress_board': self.convert_progress_board()
                      }
+
+    def update_constructable(self):
+        player = self.state_variables.turn_player
         self.constructable_dict = {'cards': [card.card_name for card in self.players[player].cards_in_play],
                                    'wonders': [wonder.wonder_name for wonder in self.players[player].wonders_in_play],
                                    'owned_tokens': [token.token_name for token in self.players[player].progress_tokens_in_play],
@@ -283,6 +297,7 @@ class WondersEnv(Env):
 
     def valid_moves_main(self):
         '''Returns list of valid moves for given board state and player states'''
+        self.update_constructable()
         player = self.state_variables.turn_player
         opponent = player ^ 1
         cards = self.age_boards[self.state_variables.current_age].card_positions
@@ -450,6 +465,7 @@ class WondersEnv(Env):
     # Main gameplay loop - players alternate choosing cards from the board and performing actions with them.
     def select_card(self, position, action='c', position_wonder=0):
         '''Function to select card on board and perform the appropriate action'''
+        self.update_constructable()
         # Turn player variables
         player = self.state_variables.turn_player
         player_state = self.players[player]
