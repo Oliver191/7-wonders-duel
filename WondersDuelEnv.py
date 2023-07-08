@@ -8,7 +8,7 @@ import copy
 
 from gymnasium import Env
 import gymnasium.spaces as spaces
-from Player1Agents import RandomAgent
+from Player1Agents import *
 
 class WondersEnv(Env):
     """Custom Environment that follows the Gym interface."""
@@ -32,7 +32,7 @@ class WondersEnv(Env):
                                              })
         # self.observation_space = spaces.Box(low=0, high=200, shape=(15,), dtype=int)
         self.display = display
-        self.agent1 = agent(self.display)
+        self.agent1 = agent(self.display) if agent is not None else None
         self.perform_check = False
 
     def __repr__(self):
@@ -73,7 +73,7 @@ class WondersEnv(Env):
             self.perform_checks()
             self.perform_check = False
 
-        if self.state_variables.turn_player == 0 and not self.done: #TODO change so called agent is random
+        if self.state_variables.turn_player == self.agent_num and not self.done and self.agent1 is not None:
             self.step(self.getAction())
 
         self.get_observation()
@@ -88,10 +88,12 @@ class WondersEnv(Env):
         self.state_variables = StateVariables()
         self.progress_board = ProgressBoard(self.csv_dict)
         self.outcome, self.state, self.constructable_dict = None, None, {}
-        self.mode, self.reward = 'wonders', 0
+        self.mode, self.reward, self.agent_num = 'wonders', 0, np.random.choice([0,1])
         self.wonders, self.wonders_selectable = self.set_wonders()
         self.display_wonders()
-        if self.state_variables.turn_player == 0: self.step(self.getAction()) #TODO change so called agent is random
+        self.science_awarded = [False for _ in range(6)]
+        if self.state_variables.turn_player == self.agent_num and self.agent1 is not None: self.step(self.getAction())
+        self.masks = self.valid_action_mask()
         self.get_observation()
         return self.state, {}
 
@@ -144,17 +146,28 @@ class WondersEnv(Env):
                 action = np.random.choice(self.valid_moves()) # TODO fix illegal action
         return action
 
-    def get_reward(self): #TODO change so called agent is random and the reward is correct
+    def get_reward(self):
         if self.done:
             if 'Player' in self.outcome:
                 if self.outcome.split()[1] == "1":
-                    self.reward = -100
+                    self.reward = -100 if self.agent_num == 0 else 100
                 elif self.outcome.split()[1] == "2":
-                    self.reward = 100
+                    self.reward = 100 if self.agent_num == 0 else -100
             else:
                 self.reward = 10
         else:
-            self.reward = 0 #TODO maybe define a reward for each step (see getScore of Learning agent)
+            # self.reward = 0
+            self.reward = self.getScore()
+
+    def getScore(self):
+        score = 0
+        player = self.state_variables.turn_player
+        for i in range(len(self.players[player].science)):
+            if self.players[player].science[i] == 1 and not self.science_awarded[i]:
+                score += 1
+                self.science_awarded[i] = True
+        if self.players[player].law: score += 1
+        return score
 
     def get_observation(self):
         player = self.state_variables.turn_player
@@ -168,6 +181,7 @@ class WondersEnv(Env):
                       'state_variables': self.convert_state_variables(),
                       'progress_board': self.convert_progress_board()
                      }
+        self.valid_action_mask()
 
     def update_constructable(self):
         player = self.state_variables.turn_player
@@ -318,7 +332,7 @@ class WondersEnv(Env):
         valid_moves += ['d' + str(i) for i in selectable]
         return valid_moves
 
-    def valid_action_mask(self):
+    def update_mask(self):
         action_masks = np.zeros((len(self.all_actions),), dtype=int)
         valid_moves = self.valid_moves()
         for move in valid_moves:
@@ -326,6 +340,10 @@ class WondersEnv(Env):
             index = self.all_actions.index(actionName)
             action_masks[index] = 1
         return action_masks
+
+    def valid_action_mask(self):
+        self.masks = self.update_mask()
+        return self.masks
 
     def enumerate_all_actions(self):
         # 1065 different actions or 201 when choosing random card when constructing wonder
@@ -340,6 +358,7 @@ class WondersEnv(Env):
         all_actions += ['construct ' + card for card in cards]
         all_actions += ['discard ' + card for card in cards]
         all_actions += ['construct ' + card_type + ' ' + wonder for wonder in wonders for card_type in unique_types]
+        # all_actions += ['construct ' + card + '-' + wonder for wonder in wonders for card in cards]
         all_actions += ['construct ' + token for token in tokens]
         all_actions += ['destroy ' + card for i, card in enumerate(cards) if card_types[i] in ['Brown', 'Grey']]
         all_actions += ['r' + str(i) for i in range(6)]
@@ -358,7 +377,9 @@ class WondersEnv(Env):
             elif action[0] == 'd': actionName = 'discard ' + age_board[int(action[1:])].card_in_slot.card_name
             elif action[0] == 'w':
                 card_type = age_board[int(action.split()[0][1:])].card_in_slot.card_type
+                # card_name = age_board[int(action.split()[0][1:])].card_in_slot.card_name
                 actionName = 'construct ' + card_type + ' ' + self.players[player].wonders_in_hand[int(action[-1])].wonder_name
+                # actionName = 'construct ' + card_name + '-' + self.players[player].wonders_in_hand[int(action[-1])].wonder_name
             else: actionName = action
         elif self.mode == 'token':
             actionName = 'construct ' + self.progress_board.tokens[int(action[1])].token_name
@@ -388,12 +409,15 @@ class WondersEnv(Env):
             if self.mode == 'main':
                 colors = ['Brown', 'Grey', 'Red', 'Blue', 'Green', 'Purple', 'Yellow']
                 if not second_part.split()[0] in colors:
+                # if not '-' in second_part:
                     action = 'c' + str(cards.index(second_part))
                 else:
                     color = colors[colors.index(second_part.split()[0])]
                     wonders_in_hand = [wonder.wonder_name for wonder in self.players[player].wonders_in_hand]
-                    card_types = [cardSlot.card_in_slot.card_type for cardSlot in age_board if cardSlot.card_selectable == 1 and cardSlot.card_in_slot is not None]
+                    card_types = [cardSlot.card_in_slot.card_type if cardSlot.card_selectable == 1 and cardSlot.card_in_slot is not None else 'None' for cardSlot in age_board]
+                    # card_names = [cardSlot.card_in_slot.card_name for cardSlot in age_board if cardSlot.card_selectable == 1 and cardSlot.card_in_slot is not None]
                     action = 'w' + str(card_types.index(color)) + ' ' + str(wonders_in_hand.index(second_part.split(color + ' ')[1]))
+                    # action = 'w' + str(card_names.index(second_part.split('-')[0])) + ' ' + str(wonders_in_hand.index(second_part.split('-')[1]))
             elif self.mode == 'token':
                 tokens = [token.token_name for token in self.progress_board.tokens]
                 action = 'c' + str(tokens.index(second_part))
@@ -765,7 +789,7 @@ class WondersEnv(Env):
         if self.display: print("Player " + str(player + 1) + " gathered 2 matching scientific symbols.")
         action, position = choice[0], choice[1:]
         if action == 's': #Display a visual representation of the game
-            self.show_board()
+            return self.show_board()
         elif action == 'c':
             self.mode = 'main'
             self.players[player].construct_token(self.progress_board.tokens[int(position)], self.display)
