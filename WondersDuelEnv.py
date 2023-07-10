@@ -9,6 +9,11 @@ import copy
 from gymnasium import Env
 import gymnasium.spaces as spaces
 from Player1Agents import *
+from sb3_contrib.common.wrappers import ActionMasker
+from sb3_contrib.ppo_mask import MaskablePPO
+
+def mask_fn(env: Env) -> np.ndarray:
+    return env.valid_action_mask()
 
 class WondersEnv(Env):
     """Custom Environment that follows the Gym interface."""
@@ -32,18 +37,33 @@ class WondersEnv(Env):
                                              })
         # self.observation_space = spaces.Box(low=0, high=200, shape=(15,), dtype=int)
         self.display = display
-        self.agent1 = agent(self.display) if agent is not None else None
+        self.agent = agent
+        self.initialize_agents()
         self.perform_check = False
 
     def __repr__(self):
         return repr(self.outcome)
+
+    def __deepcopy__(self, memo):
+        if self in memo:
+            return memo[self]
+        new_instance = WondersEnv(self.display, self.agent)
+        new_instance.reset()
+
+        for attr, value in self.__dict__.items():
+            setattr(new_instance, attr, copy.deepcopy(value, memo))
+
+        memo[self] = new_instance
+        return new_instance
 
     def step(self, action):
         action = self.convertAction(action)
         player = self.state_variables.turn_player
         opponent = player ^ 1
         discarded_cards = self.state_variables.discarded_cards
-        if self.mode == 'wonders':
+        if action == 'illegal':
+            self.reward = -10
+        elif self.mode == 'wonders':
             self.draft_wonders(action)
         elif self.mode == 'main':
             self.select_action(action)
@@ -69,15 +89,21 @@ class WondersEnv(Env):
             if action != 's': self.mode = 'main'
             if self.players[player].law: self.mode = 'law'
 
-        if self.perform_check and self.mode == 'main':
+        if self.perform_check and self.mode == 'main' and action != 'illegal':
             self.perform_checks()
             self.perform_check = False
 
         if self.state_variables.turn_player == self.agent_num and not self.done and self.agent1 is not None:
-            self.step(self.getAction())
+            if not isinstance(self.agent1, MaskablePPO):
+                self.step(self.getAction())
+            else:
+                self.get_observation()
+                action_masks = self.valid_action_mask()
+                action, _ = self.agent1.predict(self.state, action_masks=action_masks)
+                self.step(action)
 
         self.get_observation()
-        self.get_reward()
+        if action != 'illegal': self.get_reward()
         return self.state, self.reward, self.done, False, {}
 
     def reset(self, seed=None, options=None):
@@ -92,13 +118,27 @@ class WondersEnv(Env):
         self.wonders, self.wonders_selectable = self.set_wonders()
         self.display_wonders()
         self.science_awarded = [False for _ in range(6)]
-        if self.state_variables.turn_player == self.agent_num and self.agent1 is not None: self.step(self.getAction())
         self.masks = self.valid_action_mask()
+        if self.state_variables.turn_player == self.agent_num and self.agent1 is not None:
+            if not isinstance(self.agent1, MaskablePPO):
+                self.step(self.getAction())
+            else:
+                self.get_observation()
+                action_masks = self.valid_action_mask()
+                action, _ = self.agent1.predict(self.state, action_masks=action_masks)
+                self.step(action)
         self.get_observation()
         return self.state, {}
 
     def render(self):
         self.step('s')
+
+    def initialize_agents(self):
+        if not isinstance(self.agent, str):
+            self.agent1 = self.agent(self.display) if self.agent is not None else None
+        else:
+            env = ActionMasker(self, mask_fn)
+            self.agent1 = MaskablePPO.load(f'baselines3_agents/{self.agent}', env=env)
 
     def getAction(self):
         state = self.getAgentState()
@@ -143,7 +183,8 @@ class WondersEnv(Env):
                 action = self.convertNameAction(action)
             else:
                 print("\n", str(fg.red + "Illegal action: " + self.all_actions[int(action)] + rs.all), "\n")
-                action = np.random.choice(self.valid_moves()) # TODO fix illegal action
+                # action = np.random.choice(self.valid_moves())
+                action = 'illegal'
         return action
 
     def get_reward(self):
@@ -164,9 +205,9 @@ class WondersEnv(Env):
         player = self.state_variables.turn_player
         for i in range(len(self.players[player].science)):
             if self.players[player].science[i] == 1 and not self.science_awarded[i]:
-                score += 1
+                score += 2 #1
                 self.science_awarded[i] = True
-        if self.players[player].law: score += 1
+        if self.players[player].law: score += 2 #1
         return score
 
     def get_observation(self):
@@ -1443,9 +1484,10 @@ class StateVariables:
     def __deepcopy__(self, memo):
         if self in memo: #check if already copied
             return memo[self]
-        new_instance = StateVariables(turn_player = self.turn_player,
+        new_instance = StateVariables(turn_player = None,
                                       current_age = self.current_age,
                                       military_track = self.military_track)
+        new_instance.turn_player = self.turn_player
         new_instance.rng = self.rng
         new_instance.game_end = self.game_end
         new_instance.victory_points_awarded = self.victory_points_awarded

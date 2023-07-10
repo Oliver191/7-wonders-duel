@@ -13,7 +13,7 @@ def mask_fn(env: Env) -> np.ndarray:
 
 #PPO_200k_Random, PPO_500k_Random, PPO_2000k_RuleBased, PPO_2000k_Random
 #RuleBasedAgent, RandomAgent, GreedyCivilianAgent, GreedyMilitaryAgent, GreedyScientificAgent
-player1 = 'PPO_9500k_Random_RuleBased'
+player1 = 'PPO_10000k_newScore'
 player2 = 'PPO_10000k_Random_RuleBased'
 
 show = False

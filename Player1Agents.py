@@ -41,7 +41,9 @@ class RuleBasedAgent:
             redeem, choice = self.util.token_law(state)
             if redeem: return self.choose(choice, convertActionName, all_actions)
             else: return self.choose('q', convertActionName, all_actions)
-        choice = random.choice(valid_moves)
+
+        less_valid_moves = self.delete_redemption(valid_moves)
+        choice = random.choice(less_valid_moves)
         return self.choose(choice, convertActionName, all_actions)
 
     def choose(self, choice, convertActionName, all_actions):
@@ -49,6 +51,13 @@ class RuleBasedAgent:
         if self.display: print(str(fg.green + "RuleBased: " + action + rs.all))
         action = all_actions.index(action)
         return action
+
+    def delete_redemption(self, valid_moves):
+        less_valid_moves = valid_moves.copy()
+        for i in ['r0', 'r1', 'r2', 'r3', 'r4', 'r5']:
+            if i in less_valid_moves:
+                less_valid_moves.remove(i)
+        return less_valid_moves
 
     # select cards based on their color
     def card_selection(self, state, valid_moves, mode):
@@ -75,7 +84,8 @@ class RuleBasedAgent:
         for color in ['Grey', 'Brown', 'Red']: #construct any grey, brown, or red cards
             if color in card_types:
                 return 'c' + str(cards_constructable[card_types.index(color)])
-        choice = random.choice(valid_moves)
+        less_valid_moves = self.delete_redemption(valid_moves)
+        choice = random.choice(less_valid_moves)
         if choice[0] == 'd':
             choice = self.discard_card(state, valid_moves, choice)
         return choice

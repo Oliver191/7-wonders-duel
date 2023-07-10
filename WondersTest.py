@@ -11,23 +11,23 @@ import time
 def mask_fn(env: Env) -> np.ndarray:
     return env.valid_action_mask()
 
-#PPO_200k_Random, PPO_500k_Random, PPO_2000k_RuleBased, PPO_2000k_Random
+#PPO_2000k_RuleBased, PPO_2000k_Random, PPO_10000k_newScore, PPO_10000k_Random_RuleBased
 #RuleBasedAgent, RandomAgent, GreedyCivilianAgent, GreedyMilitaryAgent, GreedyScientificAgent
-player1 = 'RuleBasedAgent'
-player2 = 'PPO_10000k_Random_RuleBased'
+player1 = 'PPO_10M_vs_PPO_5_RuleBased_5'
+player2 = 'PPO_15M_Random_RuleBased'
 
 if player1 in globals():
     agent1 = globals()[player1]
     agent1_name = player1
 else:
-    agent1 = RandomAgent
-    agent1_name = 'RandomAgent'
+    agent1 = player1
+    agent1_name = player1 + '_Agent'
 
 show = False
 env = WondersEnv(show, agent=agent1)
 env = ActionMasker(env, mask_fn)
 wins_agent1, wins_agent2, draws = 0, 0, 0
-games = 10000
+games = 1000
 
 if player2 in globals():
     agent2_class = globals()[player2]
