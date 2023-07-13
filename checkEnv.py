@@ -23,7 +23,7 @@ episodes = 1
 # agent2_name = player2 + '_Agent'
 
 agent2 = RuleBasedAgent(False)
-agent2_name = 'RuleBasedAgent'
+agent2_name = 'PPO_15M_Random_RuleBased'
 
 def request_player_input(valid_moves, mode):
     choice = input("Select a a valid move: ")

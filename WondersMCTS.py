@@ -51,8 +51,8 @@ def request_player_input(valid_moves, mode):
         print("Action not in valid moves!\n")
         return request_player_input(valid_moves, mode)
 
-human = False
-show = False
+human = True
+show = True
 player1 = 'RandomAgent' #RuleBasedAgent #RandomAgent, #PPO_15M_Random_RuleBased
 if player1 in globals():
     agent1 = globals()[player1]
@@ -61,7 +61,7 @@ else:
     agent1 = player1
     agent1_name = player1 + '_Agent'
 
-mcts = mcts(timeLimit=5000)
+mcts = mcts(timeLimit=2000)
 
 def run_game(game_num, results):
     done = False
@@ -72,6 +72,7 @@ def run_game(game_num, results):
     # print("Valid moves: " + str(env.getPossibleActions()))
     while not done:
         if human:
+            if show: env.game.render()
             if env.game.state_variables.turn_player == env.game.agent_num:
                 action = request_player_input(env.game.valid_moves(), env.game.mode)
             else:
@@ -121,17 +122,19 @@ class SuppressPrints:
             sys.stdout.close()
             sys.stdout = self._original_stdout
 
-if __name__ == '__main__':
-    start_time = time.time()
+# if __name__ == '__main__':
+#     start_time = time.time()
+#
+#     games = 10
+#     results = parallel_execution(games)
+#
+#     end_time = time.time()
+#     execution_time = end_time - start_time
+#
+#     print("Wins Agent 1: " + str(results[0]) + "/" + str(games) + " (" + agent1_name + ")")
+#     print("Wins Agent 2: " + str(results[1]) + "/" + str(games) + " (" + 'MCTS_Agent' + ")")
+#     print("Draws: " + str(results[2]) + "/" + str(games))
+#
+#     print(f"\nExecution time: {execution_time} seconds")
 
-    games = 10
-    results = parallel_execution(games)
-
-    end_time = time.time()
-    execution_time = end_time - start_time
-
-    print("Wins Agent 1: " + str(results[0]) + "/" + str(games) + " (" + agent1_name + ")")
-    print("Wins Agent 2: " + str(results[1]) + "/" + str(games) + " (" + 'MCTS_Agent' + ")")
-    print("Draws: " + str(results[2]) + "/" + str(games))
-
-    print(f"\nExecution time: {execution_time} seconds")
+run_game(0, [0,0,0])

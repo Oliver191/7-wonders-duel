@@ -576,6 +576,20 @@ class WondersEnv(Env):
         chosen_position.card_in_slot = None
         player_state.update()
 
+        # If 2 matching scientific symbols are collected, allow progress token selection
+        self.check_progress_tokens(player)
+        if self.mode == 'token' or self.mode == 'law' or any(player_state.wonder_effects.values()):
+            self.perform_check = True
+            return
+
+        self.perform_checks()
+        return
+
+    def perform_checks(self):
+        player = self.state_variables.turn_player
+        age = self.state_variables.current_age
+        slots_in_age = self.age_boards[age].card_positions
+
         # Update military conflict and check for military victory
         self.state_variables.update_military_track(self.players[0].military_points, self.players[1].military_points)
         if self.state_variables.military_track >= 9:
@@ -594,20 +608,6 @@ class WondersEnv(Env):
 
         # Grant military tokens
         self.grant_military_token()
-
-        # If 2 matching scientific symbols are collected, allow progress token selection
-        self.check_progress_tokens(player)
-        if self.mode == 'token' or self.mode == 'law' or any(player_state.wonder_effects.values()):
-            self.perform_check = True
-            return
-
-        self.perform_checks()
-        return
-
-    def perform_checks(self):
-        player = self.state_variables.turn_player
-        age = self.state_variables.current_age
-        slots_in_age = self.age_boards[age].card_positions
 
         # Check for scientific victory
         if all([symbol >= 1 for symbol in self.players[player].science]):
