@@ -13,8 +13,8 @@ def mask_fn(env: Env) -> np.ndarray:
 
 #PPO_2000k_RuleBased, PPO_2000k_Random, PPO_10000k_newScore, PPO_10000k_Random_RuleBased
 #RuleBasedAgent, RandomAgent, GreedyCivilianAgent, GreedyMilitaryAgent, GreedyScientificAgent
-player1 = 'PPO_15M_Random_RuleBased'
-player2 = 'PPO_20M_Random_RuleBased'
+player1 = 'RuleBasedAgent'
+player2 = 'PPO_16M_WinReward'
 
 if player1 in globals():
     agent1 = globals()[player1]

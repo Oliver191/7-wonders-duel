@@ -191,9 +191,9 @@ class WondersEnv(Env):
         if self.done:
             if 'Player' in self.outcome:
                 if self.outcome.split()[1] == "1":
-                    self.reward = -100 if self.agent_num == 0 else 100
+                    self.reward = -100 if self.agent_num == 0 else 500
                 elif self.outcome.split()[1] == "2":
-                    self.reward = 100 if self.agent_num == 0 else -100
+                    self.reward = 500 if self.agent_num == 0 else -100
             else:
                 self.reward = 10
         else:

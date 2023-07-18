@@ -18,12 +18,13 @@ env = WondersEnv(show, agent=None)
 env = ActionMasker(env, mask_fn)
 episodes = 1
 
-# player2 = 'PPO_10M_vs_PPO_7_RuleBased_3'
-# agent2 = MaskablePPO.load(f'baselines3_agents/{player2}', env=env)
-# agent2_name = player2 + '_Agent'
+player2 = 'PPO_15M_Random_RuleBased'
+agent2 = MaskablePPO.load(f'baselines3_agents/{player2}', env=env)
+agent2_name = player2 + '_Agent'
+# print("\n", agent2.policy, "\n")
 
-agent2 = RuleBasedAgent(False)
-agent2_name = 'PPO_15M_Random_RuleBased'
+# agent2 = RuleBasedAgent(False)
+# agent2_name = 'RuleBasedAgent'
 
 def request_player_input(valid_moves, mode):
     choice = input("Select a a valid move: ")
@@ -53,8 +54,8 @@ for episode in range(episodes):
         if env.state_variables.turn_player == 0:
             action = request_player_input(env.valid_moves(), env.mode)
         elif env.state_variables.turn_player == 1:
-            # action, _ = agent2.predict(obs, action_masks=action_masks)
-            action = agent2.getAction(env.valid_moves(), env.convertActionName, env.all_actions, env.getAgentState(), env.mode)
+            action, _ = agent2.predict(obs, action_masks=action_masks)
+            # action = agent2.getAction(env.valid_moves(), env.convertActionName, env.all_actions, env.getAgentState(), env.mode)
         obs, reward, done, truncated, info = env.step(action)
         if action != 's' and show: env.render()
         print("Valid moves: " + str(env.valid_moves()))
