@@ -83,24 +83,19 @@ class WondersEnv(Env):
             self.players[player].wonder_mausoleum(action, discarded_cards, self.players[player].cards_in_play,self.players[opponent].cards_in_play, self.display)
             if action != 's':
                 self.mode = 'main'
+                if self.players[player].law: self.mode = 'law'
                 self.check_progress_tokens(player)
         elif self.mode == 'The Great Library':
             self.players[player].wonder_great_library(action, self.progress_board.discarded_tokens, self.display)
-            if action != 's': self.mode = 'main'
-            if self.players[player].law: self.mode = 'law'
+            if action != 's':
+                self.mode = 'main'
+                if self.players[player].law: self.mode = 'law'
 
         if self.perform_check and self.mode == 'main' and action != 'illegal':
             self.perform_checks()
             self.perform_check = False
 
-        if self.state_variables.turn_player == self.agent_num and not self.done and self.agent1 is not None:
-            if not isinstance(self.agent1, MaskablePPO):
-                self.step(self.getAction())
-            else:
-                self.get_observation()
-                action_masks = self.valid_action_mask()
-                action, _ = self.agent1.predict(self.state, action_masks=action_masks)
-                self.step(action)
+        self.turn_agent1()
 
         self.get_observation()
         if action != 'illegal': self.get_reward()
@@ -119,14 +114,7 @@ class WondersEnv(Env):
         self.display_wonders()
         self.science_awarded = [False for _ in range(6)]
         self.masks = self.valid_action_mask()
-        if self.state_variables.turn_player == self.agent_num and self.agent1 is not None:
-            if not isinstance(self.agent1, MaskablePPO):
-                self.step(self.getAction())
-            else:
-                self.get_observation()
-                action_masks = self.valid_action_mask()
-                action, _ = self.agent1.predict(self.state, action_masks=action_masks)
-                self.step(action)
+        self.turn_agent1()
         self.get_observation()
         return self.state, {}
 
@@ -139,6 +127,16 @@ class WondersEnv(Env):
         else:
             env = ActionMasker(self, mask_fn)
             self.agent1 = MaskablePPO.load(f'baselines3_agents/{self.agent}', env=env)
+
+    def turn_agent1(self):
+        if self.state_variables.turn_player == self.agent_num and not self.done and self.agent1 is not None:
+            if not isinstance(self.agent1, MaskablePPO):
+                self.step(self.getAction())
+            else:
+                self.get_observation()
+                action_masks = self.valid_action_mask()
+                action, _ = self.agent1.predict(self.state, action_masks=action_masks)
+                self.step(action)
 
     def getAction(self):
         state = self.getAgentState()
@@ -179,10 +177,11 @@ class WondersEnv(Env):
             action_masks = self.valid_action_mask()
             if action_masks[int(action)] == 1:
                 action = self.all_actions[int(action)]
-                if self.display: print(str(fg.red + "Choice: " + action + rs.all))
+                # if self.display: print(str(fg.red + "Choice: " + action + rs.all)) #+ bg(255, 255, 255)
+                if self.display: print(str(fg.red + 'Player ' + str(self.state_variables.turn_player+1) + ' Choice: ' + action + rs.all))
                 action = self.convertNameAction(action)
             else:
-                print("\n", str(fg.red + "Illegal action: " + self.all_actions[int(action)] + rs.all), "\n")
+                # print("\n", str(fg.red + "Illegal action: " + self.all_actions[int(action)] + rs.all), "\n")
                 # action = np.random.choice(self.valid_moves())
                 action = 'illegal'
         return action
@@ -191,9 +190,19 @@ class WondersEnv(Env):
         if self.done:
             if 'Player' in self.outcome:
                 if self.outcome.split()[1] == "1":
-                    self.reward = -100 if self.agent_num == 0 else 500
+                    if self.agent_num == 0:
+                        self.reward = -100
+                    else:
+                        if 'Civilian' in self.outcome: self.reward = 100 #500
+                        elif 'Military' in self.outcome: self.reward = 120
+                        elif 'Scientific' in self.outcome: self.reward = 140 #140
                 elif self.outcome.split()[1] == "2":
-                    self.reward = 500 if self.agent_num == 0 else -100
+                    if self.agent_num == 0:
+                        if 'Civilian' in self.outcome: self.reward = 100 #500
+                        elif 'Military' in self.outcome: self.reward = 120
+                        elif 'Scientific' in self.outcome: self.reward = 140 #140
+                    else:
+                        self.reward = -100
             else:
                 self.reward = 10
         else:
@@ -265,10 +274,6 @@ class WondersEnv(Env):
         list1 = [self.state_variables.turn_player]
         list2 = [self.state_variables.current_age]
         list3 = [1 if self.state_variables.turn_choice else 0]
-        # discarded_cards = [0]
-        # if self.mode == 'The Mausoleum':
-        #     discarded_cards = [self.name_mapping[card.card_name] for card in self.state_variables.discarded_cards]
-        # return self.convert_to_np(list1, list2, list3, discarded_cards)
         return np.array(list1+list2+list3, dtype=int)
 
     def convert_progress_board(self):
@@ -561,9 +566,7 @@ class WondersEnv(Env):
             if self.wonder_constructable(player_state, opponent_state, position_wonder, False):
                 player_state.construct_wonder(position_wonder, opponent_state, player, self.state_variables.discarded_cards,
                                               player_board, opponent_board, self.display)
-                if player_state.law:
-                    self.mode = 'law'
-                elif any(player_state.wonder_effects.values()):
+                if any(player_state.wonder_effects.values()):
                     index = list(player_state.wonder_effects.values()).index(True)
                     self.mode = list(player_state.wonder_effects.keys())[index]
                 if len(self.players[0].wonders_in_play + self.players[1].wonders_in_play) == 7:

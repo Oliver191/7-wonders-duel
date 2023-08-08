@@ -26,11 +26,11 @@ agent2_name = player2 + '_Agent'
 # agent2 = RuleBasedAgent(False)
 # agent2_name = 'RuleBasedAgent'
 
-def request_player_input(valid_moves, mode):
-    choice = input("Select a a valid move: ")
+def request_player_input(valid_moves, mode, player):
+    choice = input('Player ' + str(player+1) + ' Choice: ')
     if choice == '':
         print("Select a valid action!\n")
-        return request_player_input(env.valid_moves(), env.mode)
+        return request_player_input(env.valid_moves(), env.mode, player)
     action, position = choice[0], choice[1:]
     if choice in valid_moves:
         return choice
@@ -42,17 +42,18 @@ def request_player_input(valid_moves, mode):
         return choice
     else:
         print("Action not in valid moves!\n")
-        return request_player_input(env.valid_moves(), env.mode)
+        return request_player_input(env.valid_moves(), env.mode, player)
 
 for episode in range(episodes):
     done = False
+    print()
     obs, info = env.reset()
     if show: env.render()
     print("Valid moves: " + str(env.valid_moves()))
     while not done:
         action_masks = get_action_masks(env)
         if env.state_variables.turn_player == 0:
-            action = request_player_input(env.valid_moves(), env.mode)
+            action = request_player_input(env.valid_moves(), env.mode, env.state_variables.turn_player)
         elif env.state_variables.turn_player == 1:
             action, _ = agent2.predict(obs, action_masks=action_masks)
             # action = agent2.getAction(env.valid_moves(), env.convertActionName, env.all_actions, env.getAgentState(), env.mode)
