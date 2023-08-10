@@ -39,13 +39,13 @@ Text file which contains all the libraries used and their version.
 Python file which was used to perform monte-carlo tree search (MCTS). The *human* variable can be used to set the opponent of the MCTS agent to human or agent input. With agent input the *player1* variable can be used to specify either a baseline or DRL agent. Did not end up being included in the thesis because it basically creates a copy of the current game state and plays ahead to find the best actions before returning to the starting game state. However, it shouldn’t be able to know the hidden cards available in the game ahead of time. 
 
 ### game_data:
-Folder which contains the .csv files, containing necessary game information such as card names, cost, effect, type, board layout, information on wonders, etc. 
+Folder which contains the .csv files, containing necessary game information such as card names, cost, effect, type, board layout, information on wonders, etc. The files card_list.csv and age_layout.csv were also forked from the GitHub mentioned in the beginning. 
 
 ### images:
 Folder containing the images with which *WondersVisual.py* display the game state. Images include e.g. pictures of cards, wonders, progress tokens, etc.
 
 ### old_custom_environment:
-Folder which contains the custom game environment which was used before converting to Stable Baselines3. It contains the game at the time it was forked from GitHub i.e. *forked_seven_wonders_duel.py* and the adjusted game environment with all the features added i.e. *seven_wonders_duel.py*. *seven_wonders_duel.py* contains the finished game and provides an alternative way of playing 7 Wonders Duel. Here the file itself can be run with parameters to specify agents and players. 
+Folder which contains the custom game environment which was used before converting to Stable Baselines3. It contains the game at the time it was forked from GitHub i.e. *forked_seven_wonders_duel.py* and the adjusted game environment with all the features added i.e. *seven_wonders_duel.py*. *seven_wonders_duel.py* contains the finished game and provides an alternative way of playing 7 Wonders Duel. Here the file itself can be run with parameters to specify agents and players. Within the game_data folder, the files card_list.csv and age_layout.csv were also forked from the GitHub mentioned in the beginning. 
 
 ### baselines3_agents:
 Folder which contains all the trained DRL agents left after the clean-up. They are of type *MaskablePPO* and the final trained DRL agent is called “PPO_final_DRL_agent_1.5M”. 
