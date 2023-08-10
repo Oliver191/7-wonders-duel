@@ -3,10 +3,16 @@
 The GitHub repository accompanying the MSc Thesis at KCL written by Oliver Caspers regarding the topic “AI for non-deterministic Board Games: Developing an AI Agent using Deep Reinforcement Learning for the Game 7 Wonders Duel”. Submitted on the 15.08.2023.
 
 ### originalityStatement.txt: 
-Text file which includes the statement certifying the work as my own unless otherwise specified. Note that the project was built upon the unfinished version of 7 Wonders Duel, forked from Github (https://github.com/ygoduelistharry/7-wonders-duel) on the 20.02.2023. This was also credited in the project report with a description of the game state at the time it was forked as well as a list of all the features added, and changes made. The code of the initial game can still be found at: old_custom_environment/forked_seven_wonders_duel.py with the old adjusted environment at: old_custom_environment/seven_wonders_duel.py and the new redesigned game environment at: WondersDuelEnv.py. All changes made and code added can also directly be traced on GitHub (https://github.com/ygoduelistharry/7-wonders-duel/compare/master...Oliver191:7-wonders-duel:master).
+Text file which includes the statement certifying the work as my own unless otherwise specified. Note that the project was built upon the unfinished version of 7 Wonders Duel, forked from Github (https://github.com/ygoduelistharry/7-wonders-duel) on the 20.02.2023. This was also credited in the project report with a description of the game state at the time it was forked (see initialState.png) as well as a list of all the features added, and changes made (see addedFeatures.png). The code of the initial game can still be found at: old_custom_environment/forked_seven_wonders_duel.py with the old adjusted environment at: old_custom_environment/seven_wonders_duel.py and the new redesigned game environment at: WondersDuelEnv.py. All changes made and code added can also directly be traced on GitHub (https://github.com/ygoduelistharry/7-wonders-duel/compare/master...Oliver191:7-wonders-duel:master).
 
 ### initialGameLog.docx: 
 Word file which keeps track of the initial game state at the time it was forked, changes made, and features added.
+
+### initialState.png:
+Picture of a table summarizing all features which were already implemented when the game was forked.
+
+### addedFeatures.png:
+Picture of a table summarizing all features which were added to the game after the game was forked.
 
 ### WondersDuelEnv.py:
 Python file which contains the board game 7 Wonders Duel. Was built upon the custom environment of the gymnasium library. Can take an agent as input during initialization to specify an opponent to play against. Main functions include *step()* (to take an action within the environment), *reset()* (to set or reset the game environment to start a new game), and *render()* (to visualize the game state). Can be used in conjunction with e.g. *playEnv.py* to play the game.
