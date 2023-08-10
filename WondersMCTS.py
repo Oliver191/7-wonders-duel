@@ -1,6 +1,6 @@
 from mcts import mcts
 from WondersDuelEnv import WondersEnv
-from Player1Agents import *
+from baselineAgents import *
 import copy
 import multiprocessing
 from multiprocessing import Pool

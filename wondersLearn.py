@@ -1,7 +1,7 @@
 import numpy as np
 from gymnasium import Env
 from WondersDuelEnv import WondersEnv
-from Player1Agents import *
+from baselineAgents import *
 
 from stable_baselines3.common.callbacks import BaseCallback
 from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
@@ -78,7 +78,7 @@ class EarlyStoppingCallback(BaseCallback):
 
 # agent1 = 'PPO_15M_Random_RuleBased'
 # player1 = 'RuleBasedAgent'
-player1 = 'PPO_0.854_1508k_[2245, 0.999, 8.39e-05, 7.8e-06, 0.43153117, 17]'
+player1 = 'PPO_final_0.854_1508k_[2245, 0.999, 8.39e-05, 7.8e-06, 0.43153117, 17]'
 # agent1 = RandomAgent
 # agent1 = 'PPO_1350_EarlyStopping_[1571, 0.99, 0.00061148, 3e-07, 0.37536595, 13]'
 
@@ -98,7 +98,7 @@ games = 3
 n_steps = 500000
 
 # import optuna
-# path = 'sqlite:///C:/Users/olive/Documents/GitHub/7-wonders-duel/optimizeRuleBased.db'
+# path = 'sqlite:///C:/Users/olive/Documents/GitHub/7-wonders-duel/SQL_databases/optimizeRuleBased.db'
 # study = optuna.create_study(direction="maximize", storage=path, study_name="optimizeRuleBased", load_if_exists=True)
 # trial_ = study.best_trial
 # params = trial_.params
@@ -120,10 +120,10 @@ n_steps = 500000
 #
 # print(params)
 
-agent2 = MaskablePPO(MaskableMultiInputActorCriticPolicy, env, verbose=1, tensorboard_log="./tensorboard4/")
-# agent2 = MaskablePPO(MaskableMultiInputActorCriticPolicy, env, verbose=1, tensorboard_log="./tensorboard4/", **params)
+agent2 = MaskablePPO(MaskableMultiInputActorCriticPolicy, env, verbose=1, tensorboard_log="./tensorboard_logs/")
+# agent2 = MaskablePPO(MaskableMultiInputActorCriticPolicy, env, verbose=1, tensorboard_log="./tensorboard_logs/", **params)
 # player2 = 'PPO_noMask_1.25M_RuleBased_[2107, 0.98, 0.000103489, 1.612e-06, 0.460791665, 10]'
-# agent2 = MaskablePPO.load(f'baselines3_agents/{player2}', env=env, verbose=1, tensorboard_log="./tensorboard4/", **params)
+# agent2 = MaskablePPO.load(f'baselines3_agents/{player2}', env=env, verbose=1, tensorboard_log="./tensorboard_logs/", **params)
 # params['clip_range'] = params['clip_range']('_')
 # hyperparams_name = list(params.values())
 # for i, param in enumerate(hyperparams_name):

@@ -2,13 +2,13 @@
 import numpy as np
 from numpy.random import default_rng
 from sty import fg, bg, rs
-from seven_wonders_visual import ImageDisplay
+from WondersVisual import ImageDisplay
 from collections import Counter
 import copy
 
 from gymnasium import Env
 import gymnasium.spaces as spaces
-from Player1Agents import *
+from baselineAgents import *
 from sb3_contrib.common.wrappers import ActionMasker
 from sb3_contrib.ppo_mask import MaskablePPO
 
@@ -155,12 +155,12 @@ class WondersEnv(Env):
 
 
     def read_data(self):
-        csv_dict = {'age_layouts': np.genfromtxt('age_layout.csv', delimiter=',', skip_header=1, dtype=str),
-                    'age_layouts_labels': np.genfromtxt('age_layout.csv', delimiter=',', dtype=str, max_rows=1),
-                    'card_list': np.genfromtxt('card_list.csv', delimiter=',', skip_header=1, dtype=str),
-                    'card_list_labels': np.genfromtxt('card_list.csv', delimiter=',', dtype=str, max_rows=1),
-                    'token_list': np.genfromtxt('progress_tokens.csv', delimiter=',', skip_header=1, dtype=str),
-                    'wonder_list': np.genfromtxt('wonder_list.csv', delimiter=',', skip_header=1, dtype=str)}
+        csv_dict = {'age_layouts': np.genfromtxt('game_data/age_layout.csv', delimiter=',', skip_header=1, dtype=str),
+                    'age_layouts_labels': np.genfromtxt('game_data/age_layout.csv', delimiter=',', dtype=str, max_rows=1),
+                    'card_list': np.genfromtxt('game_data/card_list.csv', delimiter=',', skip_header=1, dtype=str),
+                    'card_list_labels': np.genfromtxt('game_data/card_list.csv', delimiter=',', dtype=str, max_rows=1),
+                    'token_list': np.genfromtxt('game_data/progress_tokens.csv', delimiter=',', skip_header=1, dtype=str),
+                    'wonder_list': np.genfromtxt('game_data/wonder_list.csv', delimiter=',', skip_header=1, dtype=str)}
         return csv_dict
 
     def map_name_int(self):

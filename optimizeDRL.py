@@ -10,7 +10,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from WondersDuelEnv import WondersEnv  # Import your environment and wrapper
 from sb3_contrib.common.maskable.utils import get_action_masks
 from sb3_contrib.common.maskable.policies import MaskableMultiInputActorCriticPolicy
-from Player1Agents import *
+from baselineAgents import *
 
 from stable_baselines3.common.callbacks import BaseCallback
 
@@ -92,7 +92,7 @@ def objective(trial):
     env = DummyVecEnv([lambda: ActionMasker(WondersEnv(show, agent=agent1), mask_fn)])
     # model = MaskablePPO(MaskableMultiInputActorCriticPolicy, env, verbose=0, tensorboard_log="./tensorboard4/", **hyperparams)
     player2 = 'PPO_0.853_1257k_[2107, 0.98, 0.00010349, 1.61e-06, 0.46079166, 10]'
-    model = MaskablePPO.load(f'baselines3_agents/{player2}', env=env, verbose=0, tensorboard_log="./tensorboard4/", **hyperparams)
+    model = MaskablePPO.load(f'baselines3_agents/{player2}', env=env, verbose=0, tensorboard_log="./tensorboard_logs/", **hyperparams)
 
     try:
         progress_callback = TrackTrainingProgressCallback()
@@ -103,8 +103,8 @@ def objective(trial):
         model.learn(total_timesteps=250000, callback=[progress_callback, early_callback], reset_num_timesteps=False, use_masking=True, tb_log_name= '0.0_' + str(trial.number) + '_100k_' + str(hyperparams_name))
     except ValueError as e:
         trial.report(float('nan'), progress_callback.current_step)
-        old_dir_name = "./tensorboard4/" + '0.0_' + str(trial.number) + '_100k_' + str(hyperparams_name) + '_0'
-        new_dir_name = "./tensorboard4/" + '0.0_pruned_' + str(trial.number) + '_100k_' + str(hyperparams_name)
+        old_dir_name = "./tensorboard_logs/" + '0.0_' + str(trial.number) + '_100k_' + str(hyperparams_name) + '_0'
+        new_dir_name = "./tensorboard_logs/" + '0.0_pruned_' + str(trial.number) + '_100k_' + str(hyperparams_name)
         os.rename(old_dir_name, new_dir_name)
         raise optuna.exceptions.TrialPruned()
 
@@ -112,16 +112,16 @@ def objective(trial):
         mean_reward = early_callback.mean_reward
     else:
         mean_reward = evaluate(model, num_steps=2000)
-    old_dir_name = "./tensorboard4/" + '0.0_' + str(trial.number) + '_100k_' + str(hyperparams_name) + '_0'
+    old_dir_name = "./tensorboard_logs/" + '0.0_' + str(trial.number) + '_100k_' + str(hyperparams_name) + '_0'
     if trial.number > 0:
         if mean_reward <= study.best_value:
-            new_dir_name = "./tensorboard4/" + f'PPO_low_{mean_reward}_{trial.number}_{int(model.num_timesteps/1000)}k_{hyperparams_name}'
+            new_dir_name = "./tensorboard_logs/" + f'PPO_low_{mean_reward}_{trial.number}_{int(model.num_timesteps/1000)}k_{hyperparams_name}'
         else:
-            new_dir_name = "./tensorboard4/" + f'PPO_{mean_reward}_{trial.number}_{int(model.num_timesteps/1000)}k_{hyperparams_name}'
+            new_dir_name = "./tensorboard_logs/" + f'PPO_{mean_reward}_{trial.number}_{int(model.num_timesteps/1000)}k_{hyperparams_name}'
             name = f'PPO_{mean_reward}_{int(model.num_timesteps/1000)}k_{hyperparams_name}'
             model.save(f'baselines3_agents/{name}')
     else:
-        new_dir_name = "./tensorboard4/" + f'PPO_{mean_reward}_{trial.number}_{int(model.num_timesteps / 1000)}k_{hyperparams_name}'
+        new_dir_name = "./tensorboard_logs/" + f'PPO_{mean_reward}_{trial.number}_{int(model.num_timesteps / 1000)}k_{hyperparams_name}'
         name = f'PPO_{mean_reward}_{int(model.num_timesteps / 1000)}k_{hyperparams_name}'
         model.save(f'baselines3_agents/{name}')
 
@@ -130,7 +130,7 @@ def objective(trial):
 
 start_time = time.time()
 
-path = 'sqlite:///C:/Users/olive/Documents/GitHub/7-wonders-duel/optimizeRuleBased750k.db'
+path = 'sqlite:///C:/Users/olive/Documents/GitHub/7-wonders-duel/SQL_databases/optimizeRuleBased750k.db'
 study = optuna.create_study(direction="maximize", storage=path, study_name="optimizeRuleBased750k", load_if_exists=True)
 
 study.optimize(objective, n_trials=10)

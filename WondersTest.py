@@ -1,7 +1,7 @@
 import numpy as np
 from gymnasium import Env
 from WondersDuelEnv import WondersEnv
-from Player1Agents import *
+from baselineAgents import *
 from collections import Counter
 
 from sb3_contrib.common.wrappers import ActionMasker
@@ -13,11 +13,7 @@ import os
 def mask_fn(env: Env) -> np.ndarray:
     return env.valid_action_mask()
 
-#PPO_2000k_RuleBased, PPO_2000k_Random, PPO_10000k_newScore, PPO_10000k_Random_RuleBased
-#RuleBasedAgent, RandomAgent, GreedyCivilianAgent, GreedyMilitaryAgent, GreedyScientificAgent
-#PPO_0.842_15M_15153_[1975, 0.98, 0.00011965, 1.95e-06, 0.32663236, 5], PPO_5000k_Random_RuleBased
-# player1 = 'PPO_vs_Final_1.5M' #PPO_15M_Random_RuleBased
-player1 = 'PPO_0.854_1508k_[2245, 0.999, 8.39e-05, 7.8e-06, 0.43153117, 17]'
+player1 = 'PPO_final_DRL_agent_1.5M' #PPO_15M_Random_RuleBased
 # player2 = 'RandomAgent'
 # player2 = 'GreedyCivilianAgent'
 # player2 = 'GreedyMilitaryAgent'
@@ -26,14 +22,18 @@ player2 = 'RuleBasedAgent'
 # player2 = 'PPO_1M_15PPO_newReward_[0.33761737, 5.94e-06, 0.99, 0.00189646, 9, 1237]'
 
 #no Tuning
-#PPO_noTuning_1.5M_RuleBased_
+#PPO_noTuning_1.5M_RuleBased
+#PPO_noTuningOrMask_1.5M
+#PPO_noMask_1.5M_RuleBased_[2245, 0.999, 8.3903e-05, 7.803e-06, 0.431531171, 17]
+
 #Order on which model was trained:
-#000k-500k  : PPO_0.7785_503k_[4059, 0.97, 0.00094417, 1e-08, 0.431799, 13]
-#500k-750k  : PPO_0.7935_756k_[4020, 0.97, 0.00012852, 2e-09, 0.53012684, 19]
-#750k-1000k : PPO_0.834_1006k_[2034, 0.99, 0.00016857, 7.23e-06, 0.29984413, 7]
-#1000k-1250k: PPO_0.853_1257k_[2107, 0.98, 0.00010349, 1.61e-06, 0.46079166, 10]
-#1250k-1500l: PPO_0.854_1508k_[2245, 0.999, 8.39e-05, 7.8e-06, 0.43153117, 17]
+#000k-500k  : PPO_final_0.7785_503k_[4059, 0.97, 0.00094417, 1e-08, 0.431799, 13]
+#500k-750k  : PPO_final_0.7935_756k_[4020, 0.97, 0.00012852, 2e-09, 0.53012684, 19]
+#750k-1000k : PPO_final_0.834_1006k_[2034, 0.99, 0.00016857, 7.23e-06, 0.29984413, 7]
+#1000k-1250k: PPO_final_0.853_1257k_[2107, 0.98, 0.00010349, 1.61e-06, 0.46079166, 10]
+#1250k-1500l: PPO_final_0.854_1508k_[2245, 0.999, 8.39e-05, 7.8e-06, 0.43153117, 17]
 #PPO_1500k_final_0854
+##PPO_final_DRL_agent_1.5M
 
 if player1 in globals():
     agent1 = globals()[player1]
@@ -43,7 +43,7 @@ else:
     agent1_name = player1 + '_Agent'
 
 show = False
-games = 10000
+games = 100
 start_time = time.time()
 types = ['Brown', 'Grey', 'Blue', 'Green', 'Red', 'Yellow', 'Purple', 'Wonder']
 card_types_1, card_types_2 = Counter(), Counter()
