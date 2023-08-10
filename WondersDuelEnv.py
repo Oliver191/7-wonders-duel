@@ -1,4 +1,4 @@
-'''Module to play a game of Seven Wonders Duel'''
+'''Game environment to play a game of Seven Wonders Duel'''
 import numpy as np
 from numpy.random import default_rng
 from sty import fg, bg, rs
@@ -13,6 +13,7 @@ from sb3_contrib.common.wrappers import ActionMasker
 from sb3_contrib.ppo_mask import MaskablePPO
 
 def mask_fn(env: Env) -> np.ndarray:
+    """Returns a valid action mask based on legal actions"""
     return env.valid_action_mask()
 
 class WondersEnv(Env):
@@ -45,6 +46,7 @@ class WondersEnv(Env):
         return repr(self.outcome)
 
     def __deepcopy__(self, memo):
+        """Duplicates the game state"""
         if self in memo:
             return memo[self]
         new_instance = WondersEnv(self.display, self.agent)
@@ -57,6 +59,7 @@ class WondersEnv(Env):
         return new_instance
 
     def step(self, action):
+        """Main function to execute an action within the environment"""
         action = self.convertAction(action)
         player = self.state_variables.turn_player
         opponent = player ^ 1
@@ -102,6 +105,7 @@ class WondersEnv(Env):
         return self.state, self.reward, self.done, False, {}
 
     def reset(self, seed=None, options=None):
+        """Main function to set/reset the game environment at the beginning of a game"""
         self.done = False
         self.nameAction = {}
         self.players = [Player(0, 'human', None), Player(1, 'human', None)]
@@ -119,9 +123,11 @@ class WondersEnv(Env):
         return self.state, {}
 
     def render(self):
+        """Rendering the game state in a visual format"""
         self.step('s')
 
     def initialize_agents(self):
+        """Defines either a baseline or DRL agent within the environment as an opponent"""
         if not isinstance(self.agent, str):
             self.agent1 = self.agent(self.display) if self.agent is not None else None
         else:
@@ -129,6 +135,7 @@ class WondersEnv(Env):
             self.agent1 = MaskablePPO.load(f'baselines3_agents/{self.agent}', env=env)
 
     def turn_agent1(self):
+        """If it is the opponents turn, take an action"""
         if self.state_variables.turn_player == self.agent_num and not self.done and self.agent1 is not None:
             if not isinstance(self.agent1, MaskablePPO):
                 self.step(self.getAction())
@@ -139,11 +146,13 @@ class WondersEnv(Env):
                 self.step(action)
 
     def getAction(self):
+        """Return the action chosen by the baseline agent"""
         state = self.getAgentState()
         action = self.agent1.getAction(self.valid_moves(), self.convertActionName, self.all_actions, state, self.mode)
         return action
 
     def getAgentState(self):
+        """Return the state representation for the baseline agent"""
         state = {'age_board': self.age_boards[self.state_variables.current_age].card_positions,
                  'player': self.players[self.state_variables.turn_player],
                  'opponent': self.players[self.state_variables.turn_player ^ 1],
@@ -155,6 +164,7 @@ class WondersEnv(Env):
 
 
     def read_data(self):
+        """Returns a dictionary summarizing all game information"""
         csv_dict = {'age_layouts': np.genfromtxt('game_data/age_layout.csv', delimiter=',', skip_header=1, dtype=str),
                     'age_layouts_labels': np.genfromtxt('game_data/age_layout.csv', delimiter=',', dtype=str, max_rows=1),
                     'card_list': np.genfromtxt('game_data/card_list.csv', delimiter=',', skip_header=1, dtype=str),
@@ -164,6 +174,7 @@ class WondersEnv(Env):
         return csv_dict
 
     def map_name_int(self):
+        """Assigns a unique number to every card, wonder, and token"""
         name_list = list(self.csv_dict['card_list'][:, 0])
         name_list += list(self.csv_dict['wonder_list'][:, 0])
         name_list += list(self.csv_dict['token_list'][:, 0])
@@ -173,6 +184,7 @@ class WondersEnv(Env):
         return mapping
 
     def convertAction(self, action):
+        """If the action is valid, convert it to game readable format"""
         if type(action) != str:
             action_masks = self.valid_action_mask()
             if action_masks[int(action)] == 1:
@@ -187,6 +199,7 @@ class WondersEnv(Env):
         return action
 
     def get_reward(self):
+        """Calculate the reward for the agent based on the game state"""
         if self.done:
             if 'Player' in self.outcome:
                 if self.outcome.split()[1] == "1":
@@ -210,6 +223,7 @@ class WondersEnv(Env):
             self.reward = self.getScore()
 
     def getScore(self):
+        """Return the reward received during the game"""
         score = 0
         player = self.state_variables.turn_player
         for i in range(len(self.players[player].science)):
@@ -220,6 +234,7 @@ class WondersEnv(Env):
         return score
 
     def get_observation(self):
+        """Create the dictionary which stores the observation space"""
         player = self.state_variables.turn_player
         player_attributes, player_cards = self.convert_player(self.players[player])
         opponent_attributes, opponent_cards = self.convert_player(self.players[player^1])
@@ -234,6 +249,7 @@ class WondersEnv(Env):
         self.valid_action_mask()
 
     def update_constructable(self):
+        """Updates several lists used throughout the game"""
         player = self.state_variables.turn_player
         self.constructable_dict = {'cards': [card.card_name for card in self.players[player].cards_in_play],
                                    'wonders': [wonder.wonder_name for wonder in self.players[player].wonders_in_play],
@@ -241,6 +257,7 @@ class WondersEnv(Env):
                                    'opponent_tokens': [token.token_name for token in self.players[player ^ 1].progress_tokens_in_play]}
 
     def convert_to_np(self, *arrays, max_len=None):
+        """Convert lists into a stacked np array of the same size"""
         lengths = [len(arr) for arr in arrays]
         if max_len is None: max_len = max(lengths)
         result = np.zeros((len(arrays), max_len), dtype=int)
@@ -249,6 +266,7 @@ class WondersEnv(Env):
         return result
 
     def convert_age_board(self):
+        """Returns the age board and wonders used in the observation dict"""
         cardSlots = self.age_boards[self.state_variables.current_age].card_positions
         shift = 0 if any(self.wonders_selectable[:4]) else 4
         cards = [self.name_mapping[cardSlot.card_in_slot.card_name] for cardSlot in cardSlots if cardSlot.card_visible == 1 and cardSlot.card_in_slot is not None]
@@ -256,6 +274,7 @@ class WondersEnv(Env):
         return self.convert_to_np(cards, wonders, max_len=13).flatten()
 
     def convert_player(self, custom_class):
+        """Returns player information used in the observation dict"""
         class_dict = {}
         for attr_name, attr_value in vars(custom_class).items():
             if attr_name not in ['player_type', 'agent', 'law', 'replay', 'wonder_effects', 'science']:
@@ -271,12 +290,14 @@ class WondersEnv(Env):
         return player_attributes, player_cards.flatten()
 
     def convert_state_variables(self):
+        """Returns game state information used in the observation dict"""
         list1 = [self.state_variables.turn_player]
         list2 = [self.state_variables.current_age]
         list3 = [1 if self.state_variables.turn_choice else 0]
         return np.array(list1+list2+list3, dtype=int)
 
     def convert_progress_board(self):
+        """Returns progress board information used in the observation dict"""
         tokens = [self.name_mapping[token.token_name] for token in self.progress_board.tokens if token.token_in_slot]
         discarded_tokens = []
         if self.mode == 'The Great Library':
@@ -284,6 +305,7 @@ class WondersEnv(Env):
         return self.convert_to_np(tokens, discarded_tokens, max_len=5).flatten()
 
     def set_wonders(self):
+        """Returns 8 randomly chosen wonders for wonder selection"""
         wonder_count = 8
         chosen_wonders = self.csv_dict['wonder_list'][np.random.choice(self.csv_dict['wonder_list'].shape[0], wonder_count, replace=False)]
         wonders, wonders_selectable = [], []
@@ -293,6 +315,7 @@ class WondersEnv(Env):
         return wonders, wonders_selectable
 
     def draft_wonders(self, action):
+        """Use the action to select one of the available wonders"""
         if action == 's': return self.show_wonders()
         player = self.state_variables.turn_player
         opponent = player ^ 1
@@ -311,10 +334,12 @@ class WondersEnv(Env):
             self.display_wonders()
 
     def choose_wonder(self, player, choice):
+        """Append the wonder to the hand of the player"""
         self.players[player].wonders_in_hand.append(self.wonders[choice])
         self.wonders_selectable[choice] = False
 
     def display_wonders(self):
+        """Displays the available wonders in the command line"""
         if self.display:
             shift = 0 if any(self.wonders_selectable[:4]) else 4
             selectable_wonders = '['
@@ -327,12 +352,14 @@ class WondersEnv(Env):
             print("Wonders available: ", selectable_wonders)
 
     def show_wonders(self):
+        """Visually displays the available wonders using Pygame"""
         shift = 0 if any(self.wonders_selectable[:4]) else 4
         image = ImageDisplay(220, 350)
         p1_wonders, p2_wonders = self.players[0].wonders_in_hand, self.players[1].wonders_in_hand
         image.display_wonder(self.wonders[0+shift:4+shift], self.wonders_selectable, shift, p1_wonders, p2_wonders)
 
     def valid_moves(self):
+        """Returns a list of all valid moves possible based on the current game state"""
         player = self.state_variables.turn_player
         opponent = player ^ 1
         if self.mode == 'wonders':
@@ -356,7 +383,7 @@ class WondersEnv(Env):
         return valid_moves
 
     def valid_moves_main(self):
-        '''Returns list of valid moves for given board state and player states'''
+        '''Returns a list of all valid moves during the main game loop'''
         self.update_constructable()
         player = self.state_variables.turn_player
         opponent = player ^ 1
@@ -379,6 +406,7 @@ class WondersEnv(Env):
         return valid_moves
 
     def update_mask(self):
+        """Updates the valid action mask"""
         action_masks = np.zeros((len(self.all_actions),), dtype=int)
         valid_moves = self.valid_moves()
         for move in valid_moves:
@@ -388,10 +416,12 @@ class WondersEnv(Env):
         return action_masks
 
     def valid_action_mask(self):
+        """Returns the valid action mask"""
         self.masks = self.update_mask()
         return self.masks
 
     def enumerate_all_actions(self):
+        """Returns a list of all possible actions during the game"""
         # 1065 different actions or 201 when choosing random card when constructing wonder
         # (could also include discarded card type to choose) -> 273 actions
         all_actions = []
@@ -413,6 +443,7 @@ class WondersEnv(Env):
         return all_actions
 
     def convertActionName(self, action):
+        """Converts a game action into an action description"""
         player = self.state_variables.turn_player
         age_board = self.age_boards[self.state_variables.current_age].card_positions
         if self.mode == 'wonders':
@@ -442,6 +473,7 @@ class WondersEnv(Env):
         return actionName
 
     def convertNameAction(self, actionName):
+        """Converts an action description into a game action"""
         first_part = actionName.split()[0]
         player = self.state_variables.turn_player
         age_board = self.age_boards[self.state_variables.current_age].card_positions
@@ -484,12 +516,13 @@ class WondersEnv(Env):
         return action
 
     def is_done(self):
+        """Ends the game"""
         if self.display:
             print(self.outcome)
         self.done = True
 
     def select_action(self, choice):
-        """Function to begin requesting player input"""
+        """Executes the chosen action during the main game loop"""
         player = self.state_variables.turn_player
         action, position, position_wonder = choice[0], choice[1:], "0"
 
@@ -589,6 +622,7 @@ class WondersEnv(Env):
         return
 
     def perform_checks(self):
+        """Check for end of game and victory"""
         player = self.state_variables.turn_player
         age = self.state_variables.current_age
         slots_in_age = self.age_boards[age].card_positions
@@ -706,8 +740,8 @@ class WondersEnv(Env):
                     self.players[self.state_variables.turn_player ^ 1].coins += trade_cost
         return constructable #False if cost or materials > players coins or materials
 
-    # Checks whether the wonder is constructable given state and cost.
     def wonder_constructable(self, player, opponent, position_wonder, check):
+        """Checks whether the wonder is constructable given state and cost"""
         wonder = player.wonders_in_hand[position_wonder]
         symbol_counts = Counter(list(wonder.wonder_cost))
         cost, counts = list(symbol_counts.keys()), list(symbol_counts.values())
@@ -735,6 +769,7 @@ class WondersEnv(Env):
 
     # Chooses the resource with the highest trading cost and uses variable production for it, if available
     def variable_production(self, net_cost, cards, opponent, wonders):
+        """Reduces resource cost by variable production if available"""
         if 'Forum' in cards:
             net_cost = self.variable_production_PG(net_cost, cards, opponent)
         if 'Caravansery' in cards:
@@ -746,6 +781,7 @@ class WondersEnv(Env):
         return net_cost
 
     def variable_production_PG(self, net_cost, cards, opponent):
+        """Paper and glass variable production"""
         if 'P' in net_cost and 'G' in net_cost:
             p_rate = self.calculate_rate('P', cards, opponent)
             g_rate = self.calculate_rate('G', cards, opponent)
@@ -760,6 +796,7 @@ class WondersEnv(Env):
         return net_cost
 
     def variable_production_WCS(self, net_cost, cards, opponent):
+        """Wood, clay, and stone variable production"""
         w_rate = self.calculate_rate('W', cards, opponent)
         c_rate = self.calculate_rate('C', cards, opponent)
         s_rate = self.calculate_rate('S', cards, opponent)
@@ -798,6 +835,7 @@ class WondersEnv(Env):
 
     # If the token Masonry/Architecture is in posession, blue cards/wonders will cost 2 fewer resources
     def token_masonry_architecture(self, net_cost, cards, opponent):
+        """Reduces resource cost of blue or wonder cards"""
         if len(net_cost) <= 2:
             net_cost = ''
         else:
@@ -812,6 +850,7 @@ class WondersEnv(Env):
 
     # If the token Law is in posession, allow redeeming it for a scientific symbol
     def token_law(self, player, position):
+        """Allows law token redemption"""
         self.players[player].science[int(position)] += 1
         self.players[player].law = False
         if self.display: print("Token has been redeemed!")
@@ -820,6 +859,7 @@ class WondersEnv(Env):
 
     # If 2 matching scientific symbols are collected, allow progress token selection
     def check_progress_tokens(self, player):
+        """Checks if 2 matching scientific symbols were collected"""
         tokens_awarded = self.state_variables.progress_tokens_awarded
         match_science = [True if self.players[player].science[i] >= 2 and not tokens_awarded[i] else False for i in
                          range(len(self.players[player].science))]
@@ -829,6 +869,7 @@ class WondersEnv(Env):
 
     # Requests player input to select one of the tokens still available where token_in_slot == True
     def select_token(self, choice):
+        """Used to select an available progress token"""
         player = self.state_variables.turn_player
         if self.display: print("Player " + str(player + 1) + " gathered 2 matching scientific symbols.")
         action, position = choice[0], choice[1:]
@@ -841,8 +882,8 @@ class WondersEnv(Env):
         if self.players[player].law:
             self.mode = 'law'
 
-    # Calculates the rate at which a resource can be bought
     def calculate_rate(self, resource, cards, opponent):
+        """Calculates the rate at which a resource can be bought"""
         resource_counts = [opponent.clay, opponent.wood, opponent.stone, opponent.paper, opponent.glass]
         rate = 2 + resource_counts[['C', 'W', 'S', 'P', 'G'].index(resource)]
         #handle yellow cards fixing trading rates
@@ -854,6 +895,7 @@ class WondersEnv(Env):
         return rate
 
     def show_board(self):
+        """Visually displays the game state during the main game loop"""
         age = self.state_variables.current_age
         slots_in_age = self.age_boards[age].card_positions
         image_dict, selectable_dict = {}, {}
@@ -906,16 +948,16 @@ class WondersEnv(Env):
             print("")
             print("Current turn player is Player ", str(player + 1))
 
-    # Displays the military conflict in the command line
     def display_military_board(self):
+        """Displays the military conflict in the command line"""
         military = self.state_variables.military_track
         board = (max(0, min(18, military+9)))*'0' + '1' + (max(0, min(18, 9-military)))*'0'
         board = '[' + board[0] + '|' + board[1:4] + '|' + board[4:7] + '|' + board[7:9] + '|' + board[9] + '|' + \
             board[10:12] + '|' + board[12:15] + '|' + board[15:18] + '|' + board[18] + ']'
         return board
 
-    # Grants victory points based on conflict pawn location
     def update_conflict_points(self):
+        """Grants victory points based on conflict pawn location"""
         military = self.state_variables.military_track
         # keep track of old victory points (points_awarded)
         points_awarded = self.state_variables.victory_points_awarded
@@ -945,8 +987,8 @@ class WondersEnv(Env):
             points = points * (-1)
         self.state_variables.victory_points_awarded = points
 
-    # Grants military tokens based on military track (opposing player loses coins)
     def grant_military_token(self):
+        """Grants military tokens based on military track (opposing player loses coins)"""
         tokens = self.state_variables.military_tokens
         military_track = self.state_variables.military_track
         if tokens[0] == 0 and military_track <= -6:
@@ -962,8 +1004,8 @@ class WondersEnv(Env):
             self.players[1].coins = max(0, self.players[1].coins - 5)
             self.state_variables.military_tokens[3] = 1
 
-    # Grants victory points based on purple (guild) cards
     def update_guild_points(self, card_effects, player):
+        """Grants victory points based on purple (guild) cards"""
         cards_player_1 = self.players[0].cards_in_play
         cards_player_2 = self.players[1].cards_in_play
         colors = ['Yellow', 'Blue', 'Green', 'Red']
@@ -1009,6 +1051,7 @@ class Wonder:
                    + rs.all)
 
     def __deepcopy__(self, memo):
+        """Duplicates a Wonder"""
         if self in memo: #check if already copied
             return memo[self]
         memo[self] = Wonder(wonder_name = self.wonder_name,
@@ -1047,6 +1090,7 @@ class Card:
                    + rs.all)
 
     def __deepcopy__(self, memo):
+        """Duplicates a Card"""
         if self in memo: #check if already copied
             return memo[self]
         memo[self] = Card(card_name = self.card_name,
@@ -1090,6 +1134,7 @@ class CardSlot:
                    )
 
     def __deepcopy__(self, memo):
+        """Duplicates a CardSlot"""
         if self in memo: #check if already copied
             return memo[self]
         new_instance = CardSlot(card_in_slot = copy.deepcopy(self.card_in_slot, memo),
@@ -1119,6 +1164,7 @@ class ProgressToken:
                    + rs.all)
 
     def __deepcopy__(self, memo):
+        """Duplicates a ProgressToken"""
         if self in memo: #check if already copied
             return memo[self]
         memo[self] = ProgressToken(token_name = self.token_name,
@@ -1146,6 +1192,7 @@ class ProgressBoard:
         # return str([token if token.token_in_slot else '' for token in self.tokens])
 
     def __deepcopy__(self, memo):
+        """Duplicates the ProgressBoard"""
         if self in memo: #check if already copied
             return memo[self]
         new_instance = ProgressBoard({})
@@ -1155,8 +1202,8 @@ class ProgressBoard:
         memo[self] = new_instance
         return new_instance
 
-    # read tokens, randomly select 5, and slot them into the board
     def prepare_progress_board(self, csv_dict):
+        """Randomly selects 5 progress tokens"""
         if not csv_dict: return []
         token_count = 5 + 3
         chosen_tokens = csv_dict['token_list'][np.random.choice(csv_dict['token_list'].shape[0], token_count, replace=False)]
@@ -1198,6 +1245,7 @@ class Player:
                                'The Mausoleum': False, 'The Great Library': False}
 
     def __deepcopy__(self, memo):
+        """Duplicates a Player"""
         if self in memo: #check if already copied
             return memo[self]
         new_instance = Player(player_number = self.player_number,
@@ -1311,8 +1359,8 @@ class Player:
         self.cards_in_play.append(card)
         return
 
-    # Construct the selected wonder by applying their respective effect
     def construct_wonder(self, position_wonder, opponent, player_turn, discarded_cards, player_board, opponent_board, display):
+        """Construct the selected wonder by applying their respective effect"""
         wonder = self.wonders_in_hand[position_wonder]
         effect = wonder.wonder_effect_when_played
         effect_passive = wonder.wonder_effect_passive
@@ -1357,8 +1405,8 @@ class Player:
         self.wonders_in_play.append(wonder)
         return
 
-    # Enables the player to discard one card from his opponent in the specified color
     def wonder_destory_card(self, choice, opponent, color, player_turn, discarded_cards, name, display):
+        """Enables the player to discard one card from his opponent in the specified color"""
         opponent_cards = [card for card in opponent.cards_in_play if card.card_type == color]
         opponent_turn = player_turn ^ 1
         cards = self.print_string(opponent_cards)
@@ -1370,8 +1418,8 @@ class Player:
         self.discard_card(card, opponent, discarded_cards)
         self.wonder_effects[name] = False
 
-    # Sub-function which actually removes the card from the board and reduces resources
     def discard_card(self, card, opponent, discarded_cards):
+        """Sub-function which actually removes the card from the board and reduces resources"""
         opponent.cards_in_play.remove(card)
         resource = ['C', 'W', 'S', 'P', 'G']
         resource_names = ['clay', 'wood', 'stone', 'paper', 'glass']
@@ -1380,8 +1428,8 @@ class Player:
             setattr(opponent, resource_name, getattr(opponent, resource_name) - int(card.card_effect_passive[0]))
         discarded_cards.append(card)
 
-    # Enables the player to pick a discarded card and construct it for free
     def wonder_mausoleum(self, choice, discarded_cards, player_board, opponent_board, display):
+        """Enables the player to pick a discarded card and construct it for free"""
         cards = self.print_string(discarded_cards)
         if display: print("\nDiscarded cards since the beginning of the game: " + cards)
         action, position = choice[0], choice[1:]
@@ -1392,8 +1440,8 @@ class Player:
         discarded_cards.remove(card)
         self.wonder_effects['The Mausoleum'] = False
 
-    # Enables the player to pick 1 from 3 discarded Progress Tokens
     def wonder_great_library(self, choice, discarded_tokens, display):
+        """Enables the player to pick 1 from 3 discarded Progress Tokens"""
         tokens = self.print_string(discarded_tokens)
         if display: print("\n3 random discarded tokens from the beginning of the game: " + tokens)
         action, position = choice[0], choice[1:]
@@ -1405,14 +1453,15 @@ class Player:
         self.wonder_effects['The Great Library'] = False
 
     def wonder_show_effect(self, print_object, card_list):
+        """Display the three discarded Progress Tokens visually"""
         width, height = 220, 350
         if print_object == 'Token':
             width, height = 140, 140
         image = ImageDisplay(width, height)
         image.display_cards(card_list, print_object)
 
-    # Creates a string which can be used to print in the command line
     def print_string(self, print_cards):
+        """Creates a string which can be used to print in the command line"""
         cards = '['
         for i in range(len(print_cards)):
             cards += '#' + str(i) + ' ' + str(print_cards[i])
@@ -1425,8 +1474,8 @@ class Player:
         '''Updates player passive variables based on players tableau'''
         return
 
-    # construct the selected token by applying their respective effect
     def construct_token(self, token, display):
+        """construct the selected token by applying their respective effect"""
         effect = token.token_effect_when_played
         name = token.token_name
         owned_tokens = [own_token.token_name for own_token in self.progress_tokens_in_play]
@@ -1443,8 +1492,8 @@ class Player:
         elif name == 'Mathematics':
             self.victory_points += 3*len(owned_tokens) + 3
 
-    # If the token Law is in posession, allow redeeming it for a scientific symbol
     def token_law(self, choice, progress_board, display):
+        """If the token Law is in posession, allow redeeming it for a scientific symbol"""
         if display: print("Player " + str(self.player_number + 1) +
                           " owns the law progress token and may [r]edeem it once in exchange for any scientific symbol.")
         action, position = choice[0], choice[1:]
@@ -1485,6 +1534,7 @@ class StateVariables:
                    )
 
     def __deepcopy__(self, memo):
+        """Duplicates the StateVariables"""
         if self in memo: #check if already copied
             return memo[self]
         new_instance = StateVariables(turn_player = None,
@@ -1541,6 +1591,7 @@ class Age:
         return str('Age ' + str(self.age))
 
     def __deepcopy__(self, memo):
+        """Duplicates the Age board"""
         if self in memo:
             return memo[self]
         new_instance = Age(self.age, None)

@@ -43,7 +43,7 @@ else:
     agent1_name = player1 + '_Agent'
 
 show = False
-games = 100
+games = 1000
 start_time = time.time()
 types = ['Brown', 'Grey', 'Blue', 'Green', 'Red', 'Yellow', 'Purple', 'Wonder']
 card_types_1, card_types_2 = Counter(), Counter()
